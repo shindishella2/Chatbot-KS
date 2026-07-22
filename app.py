@@ -24,7 +24,7 @@ def load_store():
 embed_model = load_embed()
 index, chunks = load_store()
 
-EMOTION_MODEL_REPO = "Chatbot-123/Chatbot-KS"
+EMOTION_MODEL_REPO = "danishofi51/Chatbot-KS"
 @st.cache_resource
 def load_emotion_model():
     tok = AutoTokenizer.from_pretrained(EMOTION_MODEL_REPO)
