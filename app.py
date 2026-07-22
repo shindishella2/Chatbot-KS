@@ -998,28 +998,26 @@ st.markdown(f"""
     right: 20px;
     z-index: 9999999;
 }}
-.panic-exit-btn-link {{
+.panic-exit-btn {{
     background: #D8342A !important;
     color: #FFFFFF !important;
     font-weight: 800 !important;
     border: none !important;
     border-radius: 999px !important;
-    padding: 8px 18px !important;
+    padding: 8px 16px !important;
     font-size: 13px !important;
     box-shadow: 0 6px 16px rgba(216, 52, 42, .5) !important;
-    text-decoration: none !important;
+    cursor: pointer !important;
     display: inline-block !important;
     line-height: 1.5 !important;
     transition: background 0.2s ease;
 }}
-.panic-exit-btn-link:hover {{
+.panic-exit-btn:hover {{
     background: #B92A21 !important;
-    color: #FFFFFF !important;
-    text-decoration: none !important;
 }}
 </style>
 <div class="panic-exit-container">
-    <a href="https://www.google.com" target="_top" class="panic-exit-btn-link">🚨</a>
+    <button onclick="window.top.location.replace('https://www.google.com');" class="panic-exit-btn">🚨 Keluar Cepat</button>
 </div>
 """, unsafe_allow_html=True)
 # ===================== SIDEBAR =====================
