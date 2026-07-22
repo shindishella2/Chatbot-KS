@@ -10,7 +10,7 @@
 # punya GPU, jadi CUDA build itu mubazir).
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-streamlit==1.48.1
+streamlit==1.58
 torch==2.9.1
 transformers==4.57.1
 sentence-transformers==5.1.0
