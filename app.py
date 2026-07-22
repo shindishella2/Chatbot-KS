@@ -990,36 +990,69 @@ def inject_text_size_css(size_label):
     """, unsafe_allow_html=True)
 
 # ===================== PANIC EXIT — tombol darurat, fixed, selalu terlihat =====================
-st.markdown(f"""
+panic_exit_html = """
+<!DOCTYPE html>
+<html>
+<head>
 <style>
-.panic-exit-container {{
+    body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: 'Inter', sans-serif;
+    }
+    .panic-btn {
+        background-color: #D8342A;
+        color: #FFFFFF;
+        font-weight: 800;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 6px 16px rgba(216, 52, 42, .5);
+        float: right;
+        transition: background 0.2s ease;
+    }
+    .panic-btn:hover {
+        background-color: #B92A21;
+    }
+</style>
+</head>
+<body>
+    <button onclick="emergencyExit()" class="panic-btn">🚨 Keluar Cepat</button>
+
+    <script>
+    function emergencyExit() {
+        // Memaksa window utama (top browser) berpindah ke Google dan menghapus history
+        try {
+            window.top.location.replace("https://www.google.com");
+        } catch (e) {
+            // Fallback jika diblokir ketat oleh iframe sandbox
+            window.open("https://www.google.com", "_blank");
+            window.location.href = "https://www.google.com";
+        }
+    }
+    </script>
+</body>
+</html>
+"""
+
+# Render menggunakan streamlit components dengan posisi absolute di pojok kanan atas
+st.markdown("""
+<style>
+div.st-key-panic_component {
     position: fixed;
     top: 12px;
     right: 20px;
     z-index: 9999999;
-}}
-.panic-exit-btn {{
-    background: #D8342A !important;
-    color: #FFFFFF !important;
-    font-weight: 800 !important;
-    border: none !important;
-    border-radius: 999px !important;
-    padding: 8px 16px !important;
-    font-size: 13px !important;
-    box-shadow: 0 6px 16px rgba(216, 52, 42, .5) !important;
-    cursor: pointer !important;
-    display: inline-block !important;
-    line-height: 1.5 !important;
-    transition: background 0.2s ease;
-}}
-.panic-exit-btn:hover {{
-    background: #B92A21 !important;
-}}
+    width: 140px;
+}
 </style>
-<div class="panic-exit-container">
-    <button onclick="window.top.location.replace('https://www.google.com');" class="panic-exit-btn">🚨 Keluar Cepat</button>
-</div>
 """, unsafe_allow_html=True)
+
+with st.container(key="panic_component"):
+    components_html(panic_exit_html, height=40, scrolling=False)
 # ===================== SIDEBAR =====================
 mode_key = st.session_state.active_menu
 inject_text_size_css(st.session_state.text_size)
