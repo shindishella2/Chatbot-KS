@@ -995,11 +995,19 @@ panic_exit_html = """
 <html>
 <head>
 <style>
-    body {
+    * {
         margin: 0;
         padding: 0;
+        box-sizing: border-box;
+    }
+    body {
         background: transparent;
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        height: 100%;
     }
     .panic-btn {
         background-color: #D8342A;
@@ -1007,15 +1015,21 @@ panic_exit_html = """
         font-weight: 800;
         border: none;
         border-radius: 999px;
-        padding: 8px 16px;
+        padding: 8px 18px;
         font-size: 13px;
         cursor: pointer;
-        box-shadow: 0 6px 16px rgba(216, 52, 42, .5);
-        float: right;
-        transition: background 0.2s ease;
+        box-shadow: 0 4px 14px rgba(216, 52, 42, .4);
+        white-space: nowrap; /* Mencegah teks terlipat jadi 2 baris */
+        transition: background 0.2s ease, transform 0.1s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
     .panic-btn:hover {
         background-color: #B92A21;
+    }
+    .panic-btn:active {
+        transform: scale(0.96);
     }
 </style>
 </head>
@@ -1024,11 +1038,9 @@ panic_exit_html = """
 
     <script>
     function emergencyExit() {
-        // Memaksa window utama (top browser) berpindah ke Google dan menghapus history
         try {
             window.top.location.replace("https://www.google.com");
         } catch (e) {
-            // Fallback jika diblokir ketat oleh iframe sandbox
             window.open("https://www.google.com", "_blank");
             window.location.href = "https://www.google.com";
         }
@@ -1038,21 +1050,27 @@ panic_exit_html = """
 </html>
 """
 
-# Render menggunakan streamlit components dengan posisi absolute di pojok kanan atas
+# Berikan wadah fixed dengan lebar 180px dan tinggi 45px agar tombol muat sempurna
 st.markdown("""
 <style>
 div.st-key-panic_component {
-    position: fixed;
-    top: 12px;
-    right: 20px;
-    z-index: 9999999;
-    width: 140px;
+    position: fixed !important;
+    top: 10px !important;
+    right: 20px !important;
+    z-index: 9999999 !important;
+    width: 180px !important;
+    height: 45px !important;
+}
+div.st-key-panic_component iframe {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 with st.container(key="panic_component"):
-    components_html(panic_exit_html, height=40, scrolling=False)
+    components_html(panic_exit_html, height=42, scrolling=False)
 # ===================== SIDEBAR =====================
 mode_key = st.session_state.active_menu
 inject_text_size_css(st.session_state.text_size)
