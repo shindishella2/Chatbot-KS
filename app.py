@@ -991,7 +991,7 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
 
     # Gemini pakai role "user"/"model" (bukan "assistant"), system prompt terpisah dari contents
     gemini_history = []
-    for h in history[-5:]:
+    for h in history[-6:]:
         role = "model" if h["role"] == "assistant" else "user"
         gemini_history.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
     gemini_history.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg)]))
