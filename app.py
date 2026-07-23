@@ -1097,12 +1097,12 @@ with st.sidebar:
     api_key = os.environ.get("GEMINI_API_KEY")
         
         # Kalau kosong (misal saat dijalankan di lokal), baru coba ambil dari secrets.toml
-        if not api_key:
-            try:
-                api_key = st.secrets.get("GEMINI_API_KEY")
-            except Exception:
-                api_key = ""
-
+    if not api_key:
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = ""
+    
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     for key, emoji, label in MENU_ITEMS:
