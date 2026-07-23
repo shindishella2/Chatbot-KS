@@ -1,4 +1,3 @@
-from fpdf import FPDF
 import random
 import re
 import time, faiss, numpy as np, pickle, os
@@ -9,21 +8,41 @@ from sentence_transformers import SentenceTransformer
 import json
 from google import genai
 from google.genai import types
+import psutil
+
+def print_ram(stage):
+    process = psutil.Process(os.getpid())
+    ram = process.memory_info().rss / 1024 / 1024
+    print(f"[RAM] {stage}: {ram:.1f} MB")
 
 st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
                    page_icon="\U0001f49b", layout="wide",
                    initial_sidebar_state="expanded")
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource
 def load_embed():
+    print_ram("Sebelum load embedding")
+
     model = SentenceTransformer(
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         device="cpu"
     )
+
+    print_ram("Sesudah load embedding")
+
     return model
 @st.cache_resource
+@st.cache_resource
 def load_store():
-    return faiss.read_index("faiss_index.index"), pickle.load(open("chunks.pkl","rb"))
+
+    print_ram("Sebelum load faiss")
+
+    index = faiss.read_index("faiss_index.index")
+    chunks = pickle.load(open("chunks.pkl","rb"))
+
+    print_ram("Sesudah load faiss")
+
+    return index,chunks
 
 FALLBACK_SUPPORT_SENTENCE = {
     "sadness": "Aku di sini mendengarkanmu. Ceritakan saja semuanya, ya.",
@@ -849,9 +868,11 @@ MENU_ITEMS = [
 MENU_LABELS = {"konseling": "Konseling", "pasal": "Telusur Pasal", "lapor": "Panduan Lapor"}
 
 THRESHOLD = 0.5
+print_ram("Sebelum encode")
 def retrieve(query, k=4, th=THRESHOLD):
     embed_model = load_embed()
     index, chunks = load_store()
+print_ram("Sesudah encode")
 
     m = re.search(r"pasal\s+(\d{1,3})\b", query, re.IGNORECASE)
     exact_ctx = []
@@ -972,7 +993,7 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
 
     # Gemini pakai role "user"/"model" (bukan "assistant"), system prompt terpisah dari contents
     gemini_history = []
-    for h in history[-2:]:
+    for h in history[-5:]:
         role = "model" if h["role"] == "assistant" else "user"
         gemini_history.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
     gemini_history.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg)]))
@@ -1010,6 +1031,7 @@ def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-2.5-flash"):
     audio_bytes_io.seek(0)
     audio_bytes = audio_bytes_io.read()
     client = genai.Client(api_key=api_key)
+    print_ram("Sebelum Gemini")
     response = client.models.generate_content(
         model=model_name,
         contents=[
@@ -1018,10 +1040,12 @@ def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-2.5-flash"):
             "transkripsinya saja, tanpa embel-embel atau penjelasan tambahan.",
         ],
     )
+    print_ram("Sesudah Gemini")
     transcription = response.text
     return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
 
 def _pdf_sanitize(text):
+    from fpdf import FPDF
     replacements = {
         "—": "-", "–": "-", "‘": "'", "’": "'",
         "“": '"', "”": '"', "…": "...",
