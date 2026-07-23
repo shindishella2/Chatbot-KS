@@ -1,13 +1,16 @@
-from fpdf import FPDF
+import os
 import random
 import re
-import time, faiss, numpy as np, pickle, os
+import pickle
 from datetime import datetime
+from fpdf import FPDF
+import faiss
+import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
-import json
 import google.generativeai as genai
+import json
 
 # Set Page Config
 st.set_page_config(
@@ -17,6 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ===================== LOAD VECTOR DATABASE =====================
 @st.cache_resource
 def load_embed(): 
     return SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -28,7 +32,7 @@ def load_store():
 embed_model = load_embed()
 index, chunks = load_store()
 
-
+# ===================== DYNAMIC EMOTION VIA GEMINI AI =====================
 def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
     """Menggunakan Gemini untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
     if not api_key:
@@ -37,7 +41,7 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
             "perlu_rujukan": False,
             "ai_label": "Siap membantu dan mendengarkan ceritamu."
         }
-
+    
     system_prompt = (
         "Kamu adalah sistem pengolah emosi untuk chatbot konseling kekerasan seksual.\n"
         "Tugasmu menganalisis pesan user dan menghasilkan output dalam format JSON MURNI (tanpa markdown/penjelasan tambahan):\n"
@@ -50,7 +54,7 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
         "- Set 'perlu_rujukan' = true HANYA jika emosi user tergolong 'sadness', 'fear', atau distress berat.\n"
         "- Bahasa pada 'ai_label' harus santai, empati, tanpa tanda kutip, seperti teman dekat."
     )
-
+    
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
@@ -62,7 +66,6 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
             generation_config={"response_mime_type": "application/json"}
         )
         res = json.loads(response.text)
-
         return {
             "emosi": res.get("emosi", "neutral"),
             "perlu_rujukan": res.get("perlu_rujukan", False),
@@ -73,7 +76,7 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
         return {
             "emosi": "neutral",
             "perlu_rujukan": False,
-            "ai_label": "Siap membantu proses konselingmu."
+            "ai_label": "Aku di sini mendengarkanmu. Ceritakan saja, ya."
         }
 
 SUPPORT_MESSAGES = {
@@ -96,6 +99,7 @@ def get_support_banner(emotion_label: str):
     pool = SUPPORT_MESSAGES.get(emotion_label)
     return random.choice(pool) if pool else None
 
+# ===================== TEMA CSS =====================
 T = dict(
     navy="#0E1B48", mauve="#C18DB4", blush="#E2CAD8", skyblue="#87A7D0",
     slate="#27425D", deep="#0E1F2F",
@@ -126,12 +130,12 @@ def inject_css(t):
     html, body, [class*="css"], .stMarkdown, p, span, label, div {{ font-family:'Inter',sans-serif; }}
     h1,h2,h3, .hero-title, .brand h1 {{ font-family:'Plus Jakarta Sans',sans-serif; }}
     #MainMenu, footer {{ visibility:hidden; }}
-    header[data-testid="stHeader"] {{ background:transparent; }}
+    header[data-testid="stHeader"] {{ background:transparent; display:none !important; }}
     [data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"],
     [data-testid="collapsedControl"] {{ visibility:visible !important; }}
     [data-testid="stSidebarCollapsedControl"] svg, [data-testid="stSidebarCollapseButton"] svg,
     [data-testid="collapsedControl"] svg {{ fill:{t['navy']} !important; color:{t['navy']} !important; }}
-    .block-container {{ max-width:860px; padding-top:1.4rem; }}
+    .block-container {{ max-width:860px; padding-top:2rem !important; }}
 
     .glass-panel {{
         background: rgba(255,255,255,0.14);
@@ -144,7 +148,7 @@ def inject_css(t):
         box-shadow: 0 8px 32px rgba(14,27,72,.18);
     }}
 
-    /* ============ HEADER UTAMA — PERMANEN: Logo / Ruang Aman / Sub-judul ============ */
+    /* ============ HEADER UTAMA ============ */
     .main-chat-header {{ text-align:center; margin:4px 0 18px; }}
     .main-chat-header .logo-badge {{
         width:56px; height:56px; margin:0 auto 12px; border-radius:16px;
@@ -168,7 +172,7 @@ def inject_css(t):
         color:{t['header_sub']};
     }}
 
-    /* ============ KARTU 6 FITUR — scoped ke container(key="fitur_grid") ============ */
+    /* ============ KARTU 6 FITUR ============ */
     .st-key-fitur_grid [data-testid="column"] {{
         display: flex;
     }}
@@ -195,34 +199,7 @@ def inject_css(t):
         background:linear-gradient(135deg, {t['navy']} 0%, {t['mauve']} 100%) !important;
     }}
 
-    /* ============ SAFETY NET —  ============ */
-    div[data-testid="stVerticalBlockBorderWrapper"],
-    div[data-testid="stVerticalBlock"] > div[style*="background"],
-    .stAlert, div[data-testid="stNotification"],
-    div[data-testid="stExpander"], div[data-testid="stExpanderDetails"] {{
-        background: rgba(14,27,72,0.55) !important;
-        backdrop-filter: blur(6px);
-        color: #FFFFFF !important;
-        border-color: rgba(255,255,255,0.15) !important;
-    }}
-    div[data-testid="stExpander"] p, div[data-testid="stExpander"] span,
-    div[data-testid="stExpander"] li, div[data-testid="stExpander"] a {{
-        color: #FFFFFF !important;
-    }}
-    /* di dalam sidebar tetap ikutin tema krem, override balik supaya nggak ikut jadi gelap */
-    section[data-testid="stSidebar"] div[data-testid="stExpander"],
-    section[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {{
-        background: rgba(255,255,255,0.25) !important;
-        color: {t['navy']} !important;
-    }}
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] p,
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] span,
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] li,
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] a {{
-        color: {t['navy']} !important;
-    }}
-
-    /* ============ CHAT BUBBLE — user di kanan, bot di kiri, seperti chat asli ============ */
+    /* ============ CHAT BUBBLE ============ */
     [data-testid="stChatMessage"] {{ background:transparent; border:none; padding:4px 0; gap:12px; }}
     [data-testid="stChatMessageContent"] {{
         max-width: 680px;
@@ -232,8 +209,6 @@ def inject_css(t):
     [data-testid="stChatMessageContent"] p, [data-testid="stChatMessageContent"] li {{
         font-size:14.8px; line-height:1.7;
     }}
-
-    /* ============ AVATAR — target struktural, tidak bergantung nama testid ============ */
     [data-testid="stChatMessage"] > div:first-child,
     [data-testid="stChatMessage"] [data-testid*="Avatar" i],
     [data-testid="stChatMessage"] [data-testid*="avatar" i] {{
@@ -246,8 +221,6 @@ def inject_css(t):
     [data-testid="stChatMessage"] [data-testid*="avatar" i] * {{
         background: transparent !important;
     }}
-
-    /* USER = ganjil (pesan pertama): avatar & bubble ke KANAN */
     div[data-testid="stChatMessage"]:nth-of-type(odd) {{
         flex-direction: row-reverse;
         justify-content: flex-start;
@@ -261,8 +234,6 @@ def inject_css(t):
     div[data-testid="stChatMessage"]:nth-of-type(odd) [data-testid="stChatMessageContent"] strong {{
         color:{t['user_text']} !important;
     }}
-
-    /* BOT = genap: avatar & bubble tetap di KIRI */
     div[data-testid="stChatMessage"]:nth-of-type(even) {{
         flex-direction: row;
         justify-content: flex-start;
@@ -277,37 +248,12 @@ def inject_css(t):
         color:{t['bot_text']} !important;
     }}
 
-    /* fallback presisi lewat aria-label avatar, kalau browser dukung :has() */
-    div[data-testid="stChatMessage"]:has([aria-label*="user" i]) {{
-        flex-direction: row-reverse !important; justify-content: flex-start !important;
-    }}
-    div[data-testid="stChatMessage"]:has([aria-label*="user" i]) [data-testid="stChatMessageContent"] {{
-        background:{t['user_bg']} !important; border:1.5px solid {t['user_border']} !important;
-        margin-left: auto !important;
-    }}
-    div[data-testid="stChatMessage"]:has([aria-label*="user" i]) [data-testid="stChatMessageContent"] p,
-    div[data-testid="stChatMessage"]:has([aria-label*="user" i]) [data-testid="stChatMessageContent"] li {{
-        color:{t['user_text']} !important;
-    }}
-    div[data-testid="stChatMessage"]:has([aria-label*="assistant" i]) {{
-        flex-direction: row !important; justify-content: flex-start !important;
-    }}
-    div[data-testid="stChatMessage"]:has([aria-label*="assistant" i]) [data-testid="stChatMessageContent"] {{
-        background:{t['bot_bg']} !important; border:1.5px solid {t['bot_border']} !important;
-        margin-right: auto !important;
-    }}
-    div[data-testid="stChatMessage"]:has([aria-label*="assistant" i]) [data-testid="stChatMessageContent"] p,
-    div[data-testid="stChatMessage"]:has([aria-label*="assistant" i]) [data-testid="stChatMessageContent"] li {{
-        color:{t['bot_text']} !important;
-    }}
-
-    /* ============ SIDEBAR — gradient krem ============ */
+    /* ============ SIDEBAR ============ */
     section[data-testid="stSidebar"] {{
         background:linear-gradient(180deg, {t['sidebar_top']} 0%, {t['sidebar_bottom']} 100%);
         border-right:1px solid rgba(14,27,72,.08);
     }}
     section[data-testid="stSidebar"] * {{ color:{t['navy']}; }}
-
     .sidebar-logo-wrap {{ text-align:center; margin-top:6px; margin-bottom:10px; }}
     .sidebar-logo {{
         width:56px; height:56px; margin:0 auto; border-radius:50%;
@@ -324,15 +270,12 @@ def inject_css(t):
         text-align:center; font-style:italic; font-size:12px; color:{t['navy']};
         margin-bottom:14px; opacity:.85;
     }}
-
     section[data-testid="stSidebar"] div.stButton > button {{
         background:{t['navy']}; color:#fff !important; border:none; font-weight:600;
         border-radius:14px; padding:12px 14px; box-shadow:0 6px 14px rgba(14,27,72,.2);
     }}
     section[data-testid="stSidebar"] div.stButton > button:hover {{ filter:brightness(1.15); }}
     section[data-testid="stSidebar"] div.stButton > button p {{ color:#fff !important; }}
-
-    /* ============ MENU ACTIVE / INACTIVE — pembeda jelas ============ */
     section[data-testid="stSidebar"] button[kind="secondary"],
     section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {{
         background:transparent !important; color:{t['navy']} !important; font-weight:700 !important;
@@ -347,7 +290,6 @@ def inject_css(t):
     section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{
         background:rgba(241,145,109,.16) !important; border-color:rgba(241,145,109,.4) !important;
     }}
-
     section[data-testid="stSidebar"] button[kind="primary"],
     section[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{
         background:{t['active']} !important; color:#FFFFFF !important; font-weight:800 !important;
@@ -360,134 +302,7 @@ def inject_css(t):
         font-weight: 800 !important;
     }}
 
-    section[data-testid="stSidebar"] div[data-testid="stButton"]:nth-of-type(1) button {{
-        background:{t['navy']} !important; color:#fff !important; box-shadow:0 6px 14px rgba(14,27,72,.2) !important;
-        text-align:center !important;
-    }}
-    section[data-testid="stSidebar"] div[data-testid="stButton"]:nth-of-type(1) button p {{ color:#fff !important; }}
-
-    section[data-testid="stSidebar"] .streamlit-expanderHeader {{
-        font-weight:600; color:{t['navy']} !important; background:transparent !important;
-    }}
-
-    section[data-testid="stSidebar"] div[data-testid="stDownloadButton"] button {{
-        background:{t['navy']} !important; color:#fff !important; border:none !important;
-        font-weight:600 !important; border-radius:14px !important; padding:12px 14px !important;
-        box-shadow:0 6px 14px rgba(14,27,72,.2) !important;
-    }}
-    section[data-testid="stSidebar"] div[data-testid="stDownloadButton"] button p {{ color:#fff !important; }}
-
-    /* ============ EXPANDER SIDEBAR (Pengaturan / Bantuan Langsung) — hilangkan bg putih bawaan ============ */
-    section[data-testid="stSidebar"] [data-testid="stExpander"] {{
-        background: rgba(255, 255, 255, 0.2) !important;
-        border: 1px solid rgba(14, 27, 72, 0.12) !important;
-        border-radius: 16px !important;
-        overflow: hidden !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{
-        padding: 12px 14px 22px 14px !important;
-        background: transparent !important;
-    }}
-    .emergency-card {{
-        display: block;
-        color: {t['navy']};
-        text-align: left;
-    }}
-    .emergency-title {{
-        font-size: 16px;
-        font-weight: 800;
-        letter-spacing: -0.3px;
-        color: {t['navy']};
-        line-height: 1.2;
-    }}
-    .emergency-subtitle {{
-        font-size: 12px;
-        font-weight: 600;
-        opacity: 0.8;
-        margin-bottom: 10px;
-    }}
-    .emergency-desc {{
-        font-size: 12px;
-        line-height: 1.5;
-        margin-bottom: 12px;
-        opacity: 0.85;
-    }}
-    .emergency-btn {{
-        display: block !important;
-        text-align: center !important;
-        background: #25D366 !important; /* Warna hijau khas WhatsApp agar intuitif */
-        color: #FFFFFF !important;
-        text-decoration: none !important;
-        font-weight: 700 !important;
-        font-size: 12.5px !important;
-        padding: 10px 12px !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 12px rgba(37, 211, 102, 0.2) !important;
-        transition: all 0.2s ease !important;
-    }}
-    .emergency-btn:hover {{
-        background: #128C7E !important;
-        box-shadow: 0 6px 16px rgba(37, 211, 102, 0.35) !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{
-        background: transparent !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{
-        background: rgba(241,145,109,.12) !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{
-        background: transparent !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stExpander"] p,
-    section[data-testid="stSidebar"] [data-testid="stExpander"] a,
-    section[data-testid="stSidebar"] [data-testid="stExpander"] li {{
-        color:{t['navy']} !important;
-    }}
-
-    /* ============ KARTU INFORMASI PENGATURAN (KELUAR CEPAT) ============ */
-    .settings-info-card {{
-        background: rgba(216, 52, 42, 0.08) !important; /* Warna merah transparan tipis */
-        border-left: 3.5px solid #D8342A !important; /* Aksen garis merah tegas di kiri */
-        border-radius: 10px !important;
-        padding: 10px 12px !important;
-        margin-bottom: 16px !important;
-        text-align: left !important;
-    }}
-    .settings-info-title {{
-        font-size: 13.5px !important;
-        font-weight: 700 !important;
-        color: {t['navy']} !important;
-        margin-bottom: 4px !important;
-    }}
-    .settings-info-desc {{
-        font-size: 11.5px !important;
-        line-height: 1.5 !important;
-        color: {t['navy']} !important;
-        opacity: 0.85 !important;
-    }}
-
-    /* ============ MERAPIKAN WIDGET RADIO BUTTON SIDEBAR ============ */
-    /* Merapikan label utama "Ukuran teks" */
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] label p {{
-        font-size: 13.5px !important;
-        font-weight: 700 !important;
-        color: {t['navy']} !important;
-        margin-bottom: 8px !important;
-    }}
-
-    /* Memberikan jarak renggang yang proporsional antar opsi pilihan */
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] [data-testid="stWidgetLabel"] + div {{
-        gap: 16px !important;
-    }}
-
-    /* Mengatur teks opsi (Kecil, Sedang, Besar) agar lebih tegas */
-    section[data-testid="stSidebar"] div[data-testid="stRadio"] div[data-testid="stMarkdownContainer"] p {{
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        color: {t['navy']} !important;
-    }}
-
-    /* ============ SUGGESTION CHIPS — pakai container(key=) yang beneran nge-wrap ============ */
+    /* ============ CHIPS & INPUT ============ */
     .st-key-chip_row div.stButton > button {{
         background:rgba(255,255,255,0.55) !important; color:{t['navy']} !important;
         border:1.5px solid {t['skyblue']} !important; border-radius:999px !important;
@@ -499,177 +314,15 @@ def inject_css(t):
         background:{t['mauve']} !important; color:#fff !important; border-color:{t['mauve']} !important;
     }}
     .st-key-chip_row div.stButton > button:hover p {{ color:#fff !important; }}
-
-    /* ============================================================ */
-    /* INPUT CHAT — dibangun ulang total (versi lama punya bug:      */
-    /* kotak persegi mengintip di belakang tombol bulat, dan cursor  */
-    /* berubah jadi ikon "dilarang" / lingkaran merah saat hover).   */
-    /* ============================================================ */
     [data-testid="stChatInput"] {{
         background: rgba(255, 255, 255, 0.96) !important;
         border: 1.5px solid {t['skyblue']} !important;
         border-radius: 40px !important;
         box-shadow: 0 4px 14px rgba(14, 27, 72, 0.15) !important;
     }}
-
-    [data-testid="stChatInput"] * {{
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        outline: none !important;
-        filter: none !important;
-    }}
-
-    [data-testid="stBottom"] {{
-        background: {t['deep']} !important;
-    }}
-
-    div[data-testid="stBottomBlockContainer"] {{
-        max-width: 100% !important;
-        padding-left: 30px !important;
-        padding-right: 30px !important;
-        background: {t['deep']} !important;
-    }}
-
-    div[data-testid="stBottom"] > div {{
-        background: transparent !important;
-    }}
-
-    [data-testid="stChatInput"] textarea {{
-        color: {t['navy']} !important;
-        -webkit-text-fill-color: {t['navy']} !important;
-        caret-color: {t['navy']} !important;
-        font-size: 15px !important;
-    }}
-
-    [data-testid="stChatInput"] textarea::placeholder {{
-        color: #9aa3b5 !important;
-        -webkit-text-fill-color: #9aa3b5 !important;
-        opacity: 1 !important;
-    }}
-
-    [data-testid="stChatInput"]:focus-within {{
-        border-color: {t['active']} !important;
-        box-shadow: 0 0 0 3px rgba(241, 145, 109, 0.2) !important;
-    }}
-
-    /* 1. Wrapper di sekitar tombol kirim — pakai flush ke semua level
-          div di dalam stChatInput agar tidak ada bg/kotak sisa yang
-          mengintip di belakang lingkaran. Ini jauh lebih robust tanpa
-          :has() yang rentan mismatch antar versi browser/Streamlit. */
-    [data-testid="stChatInput"] > div,
-    [data-testid="stChatInput"] > div > div,
-    [data-testid="stChatInput"] > div > div > div,
-    [data-testid="stChatInput"] > div > div > div > div {{
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-    }}
-    /* Kembalikan background container utama agar tetap terlihat */
-    [data-testid="stChatInput"] {{
-        background: rgba(255, 255, 255, 0.96) !important;
-        border: 1.5px solid {t['skyblue']} !important;
-    }}
-
-    /* 2. Tombol bulat itu sendiri */
-    [data-testid="stChatInput"] button,
-    [data-testid="stChatInputSubmitButton"] {{
-        background-color: {t['mauve']} !important;
-        border-radius: 50% !important;
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        padding: 6px !important;
-        width: 32px !important;
-        height: 32px !important;
-        min-width: 32px !important;
-        min-height: 32px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        overflow: hidden !important;
-        -webkit-appearance: none !important;
-        appearance: none !important;
-        transition: filter 0.2s ease, background-color 0.2s ease !important;
-    }}
-
-    /* 3. Cursor & hover — kunci fix untuk "block merah" saat hover.
-          Browser menampilkan cursor "not-allowed" (lingkaran dicoret,
-          sering kelihatan kemerahan di Windows) kalau tombolnya dalam
-          state disabled (mis. textarea masih kosong). Di sini kita
-          bedakan tegas: aktif = pointer, nonaktif = not-allowed tapi
-          dengan tampilan pudar yang jelas, bukan tombol yang kelihatan
-          normal tapi cursor-nya nyasar. */
-    [data-testid="stChatInput"] button:not(:disabled),
-    [data-testid="stChatInputSubmitButton"]:not(:disabled) {{
-        cursor: pointer !important;
-    }}
-    [data-testid="stChatInput"] button:disabled,
-    [data-testid="stChatInputSubmitButton"]:disabled,
-    [data-testid="stChatInput"] button[disabled],
-    [data-testid="stChatInputSubmitButton"][disabled] {{
-        cursor: not-allowed !important;
-        background-color: rgba(193, 141, 180, 0.45) !important;
-    }}
-
-    [data-testid="stChatInput"] button:hover:not(:disabled),
-    [data-testid="stChatInputSubmitButton"]:hover:not(:disabled),
-    [data-testid="stChatInput"] button:active:not(:disabled),
-    [data-testid="stChatInputSubmitButton"]:active:not(:disabled) {{
-        background-color: {t['mauve']} !important;
-        filter: brightness(0.88) !important;
-    }}
-    [data-testid="stChatInput"] button:focus,
-    [data-testid="stChatInputSubmitButton"]:focus,
-    [data-testid="stChatInput"] button:focus-visible,
-    [data-testid="stChatInputSubmitButton"]:focus-visible {{
-        outline: none !important;
-        box-shadow: 0 0 0 3px rgba(193, 141, 180, 0.35) !important;
-    }}
-
-    /* 4. Bersihkan elemen anak (svg wrapper, span, dll) dari border/bg sisa */
-    [data-testid="stChatInput"] button *,
-    [data-testid="stChatInputSubmitButton"] * {{
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        background: transparent !important;
-    }}
-    [data-testid="stChatInput"] button svg rect,
-    [data-testid="stChatInputSubmitButton"] svg rect {{
-        display: none !important;
-    }}
-
-    /* 5. Ikon tombol kirim — sama kayak mic, SVG Material Icon dgn bounding-box
-          path (fill="none" bawaan). fill putih + stroke none biar bounding-box
-          tetap invisible dan panah-nya keliatan solid putih. */
-    [data-testid="stChatInputSubmitButton"] svg {{
-        display: inline-block !important;
-        color: #FFFFFF !important;
-        fill: #FFFFFF !important;
-        stroke: none !important;
-        width: 18px !important;
-        height: 18px !important;
-    }}
-
-    /* 6. Ikon mic — SVG-nya Google Material Icon: path ke-1 cuma bounding-box
-          placeholder (fill="none" bawaan, HARUS tetap invisible), path ke-2 baru
-          bentuk mic beneran, digambar pakai fill bukan stroke. Rule lama maksa
-          stroke:white ke-inherit ke path ke-1 -> kotak invisible-nya jadi keliatan.
-          Fix: fill putih (buat mic-nya), stroke none (biar kotak placeholder
-          tetap invisible, cuma path ke-1 yang punya fill="none" sendiri jadi
-          tetap ketutup, path ke-2 ikutan fill putih dari inherit). */
-    [data-testid="stChatInputMicButton"] svg {{
-        color: #FFFFFF !important;
-        fill: #FFFFFF !important;
-        stroke: none !important;
-        width: 18px !important;
-        height: 18px !important;
-    }}
-
-    .disclaimer {{ font-size:11px; line-height:1.55; color:{t['slate']} !important; margin-top:14px;
-        border-top:1px solid rgba(14,27,72,.12); padding-top:12px; }}
-    .key-ok {{ font-size:12px; color:{t['active']}; font-weight:700; padding:4px 0; }}
+    [data-testid="stBottom"] {{ background: {t['deep']} !important; }}
+    div[data-testid="stBottomBlockContainer"] {{ background: {t['deep']} !important; max-width: 100% !important; padding: 0 30px; }}
+    .disclaimer {{ font-size:11px; line-height:1.55; color:{t['slate']} !important; margin-top:14px; border-top:1px solid rgba(14,27,72,.12); padding-top:12px; }}
     .support-banner {{
         background: rgba(255,255,255,0.6);
         border-left: 4px solid {t['active']};
@@ -680,137 +333,26 @@ def inject_css(t):
         color: {t['navy']};
         line-height: 1.6;
     }}
-
-    /* ============================================================ */
-    /* RESPONSIVE MOBILE — layar sempit (hp/tablet portrait)         */
-    /* ============================================================ */
-    @media (max-width: 640px) {{
-        .block-container {{
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-            padding-top: 0.8rem !important;
-        }}
-        .glass-panel {{
-            padding: 14px 12px 6px !important;
-            border-radius: 18px !important;
-        }}
-        /* Header utama — kecilkan logo & judul */
-        .main-chat-header {{ margin: 2px 0 12px; }}
-        .main-chat-header .logo-badge {{
-            width: 44px !important; height: 44px !important; margin-bottom: 8px !important;
-        }}
-        .main-chat-header .logo-badge svg {{ width: 22px !important; height: 22px !important; }}
-        .main-chat-header .title {{ font-size: 22px !important; }}
-        .main-chat-header .subtitle {{ font-size: 12.5px !important; }}
-        /* Grid 6 fitur — 2 kolom lebih enak digenggam daripada 3 sempit */
-        .st-key-fitur_grid [data-testid="stHorizontalBlock"] {{
-            flex-wrap: wrap !important;
-        }}
-        .st-key-fitur_grid [data-testid="column"] {{
-            flex: 1 1 46% !important;
-            min-width: 46% !important;
-        }}
-        .st-key-fitur_grid div.stButton > button {{
-            height: 78px !important;
-        }}
-        .st-key-fitur_grid div.stButton > button p {{
-            font-size: 12px !important;
-        }}
-        /* Bubble chat — full width & teks lebih rapat */
-        [data-testid="stChatMessageContent"] {{
-            max-width: 88vw !important;
-            padding: 11px 14px !important;
-        }}
-        [data-testid="stChatMessageContent"] p, [data-testid="stChatMessageContent"] li {{
-            font-size: 13.5px !important;
-        }}
-        /* Chip saran — biar wrap rapi, nggak kepotong */
-        .st-key-chip_row [data-testid="stHorizontalBlock"] {{
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-        }}
-        .st-key-chip_row [data-testid="column"] {{
-            flex: 1 1 100% !important;
-            min-width: 100% !important;
-            width: 100% !important;
-        }}
-        .st-key-chip_row div.stButton > button {{
-            padding: 8px 14px !important;
-            font-size: 12.5px !important;
-        }}
-        /* Tombol darurat — perkecil & pas di layar kecil */
-        div.st-key-panic_component {{
-            top: 8px !important;
-            right: 10px !important;
-            width: 128px !important;
-            height: 38px !important;
-        }}
-        /* Input chat & container bawah — padding lebih hemat */
-        div[data-testid="stBottomBlockContainer"] {{
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-        }}
-        [data-testid="stChatInput"] textarea {{
-            font-size: 16px !important; /* cegah auto-zoom Safari/Chrome iOS saat fokus input */
-        }}
-        /* Sidebar — kecilkan logo & judul brand */
-        .sidebar-logo {{ width: 44px !important; height: 44px !important; }}
-        .sidebar-logo svg {{ width: 22px !important; height: 22px !important; }}
-        .sidebar-brand-title {{ font-size: 17px !important; }}
-        .sidebar-brand-sub {{ font-size: 11px !important; }}
-    }}
-
-    /* ============ TYPING INDICATOR — animasi "sedang mengetik" ============ */
-    .typing-indicator {{
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 6px 2px;
-    }}
-    .typing-indicator span {{
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background-color: {t['bot_text']};
-        opacity: 0.35;
-        animation: typing-bounce 1.1s infinite ease-in-out;
-    }}
-    .typing-indicator span:nth-child(1) {{ animation-delay: 0s; }}
-    .typing-indicator span:nth-child(2) {{ animation-delay: 0.15s; }}
-    .typing-indicator span:nth-child(3) {{ animation-delay: 0.3s; }}
-    @keyframes typing-bounce {{
-        0%, 60%, 100% {{ transform: translateY(0); opacity: 0.35; }}
-        30% {{ transform: translateY(-6px); opacity: 1; }}
-    }}
     </style>""", unsafe_allow_html=True)
 
 FITUR = [
-    ("\U0001f91d Konseling Kasus", "Cerita situasimu, dapat arahan empatik",
-     "Saya mengalami situasi yang mungkin termasuk kekerasan seksual. Bisa bantu saya memahami apa yang terjadi?"),
-    ("\U0001f4d1 Jenis & Pasal", "Jenis TPKS dan dasar hukumnya",
-     "Apa saja jenis tindak pidana kekerasan seksual dalam UU TPKS?"),
-    ("⚖️ Ancaman Pidana", "Sanksi penjara & denda",
-     "Berapa ancaman pidana untuk pelecehan seksual fisik dan eksploitasi seksual?"),
-    ("\U0001f6e1️ Hak Korban", "Restitusi & pemulihan",
-     "Apa saja hak korban dan bagaimana mekanisme restitusi menurut UU TPKS?"),
-    ("\U0001f4cb Alur Melapor", "Langkah lapor & pembuktian",
-     "Bagaimana cara melapor kasus kekerasan seksual dan alat bukti apa yang diakui?"),
-    ("\U0001f4de Bantuan Darurat", "Kontak lembaga layanan",
-     "Saya butuh nomor dan kontak lembaga bantuan untuk korban kekerasan seksual."),
+    ("🤝 Konseling Kasus", "Cerita situasimu, dapat arahan empatik", "Saya mengalami situasi yang mungkin termasuk kekerasan seksual. Bisa bantu saya memahami apa yang terjadi?"),
+    ("📑 Jenis & Pasal", "Jenis TPKS dan dasar hukumnya", "Apa saja jenis tindak pidana kekerasan seksual dalam UU TPKS?"),
+    ("⚖️ Ancaman Pidana", "Sanksi penjara & denda", "Berapa ancaman pidana untuk pelecehan seksual fisik dan eksploitasi seksual?"),
+    ("🛡️ Hak Korban", "Restitusi & pemulihan", "Apa saja hak korban dan bagaimana mekanisme restitusi menurut UU TPKS?"),
+    ("📋 Alur Melapor", "Langkah lapor & pembuktian", "Bagaimana cara melapor kasus kekerasan seksual dan alat bukti apa yang diakui?"),
+    ("📞 Bantuan Darurat", "Kontak lembaga layanan", "Saya butuh nomor dan kontak lembaga bantuan untuk korban kekerasan seksual."),
 ]
 
 MENU_ITEMS = [
-    ("konseling", "\U0001f91d", "Konseling"),
+    ("konseling", "🤝", "Konseling"),
     ("pasal", "⚖️", "Telusur Pasal"),
-    ("lapor", "\U0001f4cb", "Panduan Lapor"),
+    ("lapor", "📋", "Panduan Lapor"),
 ]
 MENU_LABELS = {"konseling": "Konseling", "pasal": "Telusur Pasal", "lapor": "Panduan Lapor"}
 
 THRESHOLD = 0.5
 def retrieve(query, k=4, th=THRESHOLD):
-    embed_model = load_embed()
-    index, chunks = load_store()
-
     m = re.search(r"pasal\s+(\d{1,3})\b", query, re.IGNORECASE)
     exact_ctx = []
     if m:
@@ -826,89 +368,21 @@ def retrieve(query, k=4, th=THRESHOLD):
     sim = 1.0 if exact_ctx else float(D[0][0])
     return ctx, sim
 
-BASE = """Kamu adalah "Pasal", asisten hukum berbahasa Indonesia yang HANYA membahas
-UU No. 12 Tahun 2022 tentang Tindak Pidana Kekerasan Seksual (UU TPKS).
+BASE = """Kamu adalah "Pasal", asisten hukum berbahasa Indonesia yang HANYA membahas UU No. 12 Tahun 2022 tentang Tindak Pidana Kekerasan Seksual (UU TPKS).
 
 PRINSIP WAJIB:
-- SEBELUM menjawab, cek dulu: apakah pertanyaan user ADA HUBUNGANNYA dengan kekerasan
-  seksual, TPKS, atau isi UU ini? Kalau SAMA SEKALI TIDAK NYAMBUNG (tips skripsi, resep
-  masakan, coding, dll), JANGAN dipaksa dikait-kaitkan ke pasal apapun. Jawab singkat
-  bahwa kamu cuma fokus bahas UU TPKS.
-- Jawab HANYA dari materi pasal yang tersedia. Dilarang mengarang pasal/angka. Kalau
-  jawabannya nggak ada, bilang terus terang lalu arahkan ke bantuan resmi.
-- Sebut nomor pasal HANYA kalau ISINYA SPESIFIK ke situasi (jenis kekerasan tertentu,
-  hak korban tertentu, sanksi tertentu). Pasal definisi umum/pembukaan BUKAN dasar kuat —
-  jangan dipaksa disebut. Kalau nggak ada yang pas, jangan sebut pasal sama sekali.
-- DILARANG MUTLAK menyebut kata "konteks", "kutipan", atau "yang diberikan/disediakan/
-  tersedia" dalam bentuk apapun. User nggak tahu ada proses retrieval di baliknya. Kalau
-  pasal nggak ada yang pas, LEWATI SAJA tanpa billing "tidak ada info" — fokus ke dukungan/
-  panduannya aja.
-- Sapaan WAJIB konsisten "kamu" dari awal sampai akhir. JANGAN PERNAH pakai "Anda".
-- HINDARI kata "saya"/"aku" sama sekali saat chatbot merujuk ke dirinya sendiri. Tulis
-  ulang kalimatnya biar nggak butuh kata ganti orang pertama.
-- DILARANG memulai kalimat pertama jawaban dengan kata "Kamu"/"Anda", dan DILARANG kalimat
-  pertama berupa rangkuman/label ulang atas cerita user dalam bentuk apapun (co: "Percakapan
-  yang kamu alami itu terdengar tidak nyaman..."). Langsung ke insight/reaksi/info baru.
-  Di paragraf manapun, maksimal 1 kalimat yang diawali "Kamu" — kalimat lain pakai struktur
-  beda (kata kerja, situasi, atau klausa "Kalau...", "Karena...").
-- DILARANG mengulang parafrase situasi user yang SUDAH disebut di giliran sebelumnya.
-  Anggap itu udah established, lanjut ke hal baru.
-- MAKSIMAL 1 tanda tanya per jawaban. Kalau nggak ada yang perlu ditanya, tutup dengan
-  pernyataan/langkah konkret tanpa tanda tanya.
-- Tulis dengan bahasa manusia yang mengalir, natural, dan BERVARIASI tiap respons (struktur/
-  opening/closing, bukan cuma variasi kata). DILARANG KERAS kalimat pembuka klise: "Maaf
-  mendengar...", "Terima kasih sudah berbagi...".
-- Jangan menjejalkan kontak SAPA 129 di setiap jawaban; sebut hanya bila relevan.
-- Kalimat pertama jawaban HARUS langsung berisi salah satu dari: (a) informasi/insight baru
-  yang belum disebut user, (b) pertanyaan balik jika benar-benar perlu, atau (c) langkah/opsi
-  konkret. DILARANG kalimat pertama berupa PARAFRASE situasi user dalam bentuk apapun, termasuk
-  yang berbunyi "Kalau [situasi]...", "Posisi/Keadaan/Situasi [X] itu...", "Kamu sudah/sedang...".
-  Contoh BENAR: "Menolak permintaan itu adalah hakmu, dan penolakan itu sendiri sudah cukup —
-  nggak perlu alasan tambahan." Contoh SALAH: "Kalau pacarmu meminta hal itu, itu bisa membuatmu
-  tidak nyaman." (ini parafrase, dilarang)
-- WAJIB menyelipkan emoji/emoticon yang relevan, hangat, dan menenangkan di setiap respons (misalnya: 🫂, 💛, 🛡️, ✨) di dalam bubble chat agar terasa suportif dan ramah.
+- SEBELUM menjawab, cek dulu: apakah pertanyaan user ADA HUBUNGANNYA dengan kekerasan seksual, TPKS, atau isi UU ini? Kalau SAMA SEKALI TIDAK NYAMBUNG, JANGAN dipaksa dikaitkan. Jawab singkat bahwa kamu cuma fokus bahas UU TPKS.
+- Jawab HANYA dari materi pasal yang tersedia. Dilarang mengarang pasal.
+- Sapaan WAJIB konsisten "kamu". JANGAN PERNAH pakai "Anda".
+- HINDARI kata "saya"/"aku" saat chatbot merujuk ke dirinya sendiri.
+- DILARANG memulai kalimat pertama jawaban dengan kata "Kamu"/"Anda", dan DILARANG parafrase kaku atas cerita user.
+- WAJIB menyelipkan emoji/emoticon yang relevan dan hangat di setiap respons (misalnya: 🫂, 💛, 🛡️, ✨).
 """
+
 PROMPTS = {
-"konseling": BASE + '''
-
-PERAN SEKARANG: KONSELOR (bukan customer service, bukan legal-bot).
-Baca cerita orangnya dulu, reaksi dengan cara yang nunjukin kamu beneran nangkep detailnya
-(sebut ulang elemen spesifik dari ceritanya dengan kata-katamu sendiri, bukan parafrase kaku).
-Validasi perasaannya tanpa menggurui. Kalau ada pasal yang BENAR-BENAR pas dengan situasinya,
-selipkan natural di tengah kalimat (bukan sebagai poin terpisah/dokumentatif). Kalau nggak ada
-pasal yang pas, itu OK — nggak usah dipaksa nyebut pasal sama sekali di respons ini.
-Tutup dengan sesuatu yang konkret: satu langkah kecil yang relevan buat situasi dia, ATAU
-ajakan buat cerita lebih lanjut yang terasa personal (bukan template).
-Nada: seperti teman yang paham hukum, bukan seperti membacakan pasal. Maksimal 4 paragraf pendek,
-variasikan panjang & struktur kalimat supaya nggak kerasa template.
-
-JAGA KESELAMATAN EMOSIONAL — INI PRIORITAS DI ATAS INFORMASI HUKUM:
-- Jangan pernah membuat user merasa lebih bersalah, lebih takut, atau lebih terpojok dari
-  sebelum dia curhat. Kalau ragu antara jawaban yang "lengkap secara hukum" vs "aman secara
-  emosional", pilih yang aman secara emosional.
-- Jangan memaksa/mendesak user buat lapor, konfrontasi pelaku, atau ambil tindakan tertentu.
-  Tawarkan opsi, bukan instruksi. Hormati kalau dia belum siap atau belum mau bertindak.
-- Kalau user menunjukkan tanda distress berat (putus asa, menyalahkan diri berlebihan,
-  menyebut ingin menyakiti diri), JANGAN lanjut bahas pasal/hukum dulu — fokus ke stabilisasi
-  emosinya dan arahkan ke bantuan profesional/hotline dengan tenang, bukan dengan nada
-  panik atau menghakimi.
-- Jangan membombardir dengan banyak istilah hukum sekaligus kalau user kelihatan rapuh —
-  cukup satu poin paling penting per respons, sisanya bisa nunggu giliran berikutnya.''',
-
-"pasal": BASE + '''
-
-PERAN SEKARANG: PENELUSUR PASAL.
-Jawab lugas dan informatif seperti referensi hukum. Sebutkan pasal + isi pokoknya +
-ancaman pidana (penjara/denda) bila ada. Boleh pakai poin bernomor agar rapi.
-Minim basa-basi empati; langsung ke substansi hukum. Sebut nomor pasal dengan tepat.''',
-
-"lapor": BASE + '''
-
-PERAN SEKARANG: PEMANDU PELAPORAN.
-Beri panduan PRAKTIS dan berurutan: ke mana melapor (UPTD PPA, Unit PPA Polisi),
-bukti/dokumen yang perlu disiapkan, hak korban selama proses, dan apa yang terjadi
-setelah lapor. Susun sebagai langkah 1-2-3 yang mudah diikuti. Rujuk pasal terkait
-(mis. pelaporan, alat bukti, perlindungan). Akhiri dengan kontak resmi bila relevan.''',
+    "konseling": BASE + "\nPERAN SEKARANG: KONSELOR empatik. Validasi perasaan user, selipkan pasal jika sangat relevan. Maksimal 4 paragraf pendek.",
+    "pasal": BASE + "\nPERAN SEKARANG: PENELUSUR PASAL. Jawab lugas, sebutkan pasal + sanksi pidana secara rinci.",
+    "lapor": BASE + "\nPERAN SEKARANG: PEMANDU PELAPORAN. Beri langkah praktis 1-2-3 ke lembaga terkait & pembuktian.",
 }
 
 def gemini_answer(api_key, user_input, history, mode, support_info):
@@ -921,7 +395,7 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
 
     user_msg = f"PERTANYAAN PENGGUNA:\n{user_input}\n\nKONTEKS PASAL UU TPKS (relevansi {sim:.0%}):\n{context}"
 
-    # Gemini pakai role "user"/"model", bukan "user"/"assistant"
+    # Format history khusus Gemini
     gemini_history = []
     for h in history[-6:]:
         role = "model" if h["role"] == "assistant" else "user"
@@ -957,296 +431,110 @@ def transcribe_audio(audio_bytes_io):
 
 def _pdf_sanitize(text):
     replacements = {"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "..."}
-    for k, v in replacements.items(): 
-        text = text.replace(k, v)
-        
-    # 1. Ganti karakter Tab dengan spasi, karena Tab sering merusak lebar kolom FPDF
+    for k, v in replacements.items(): text = text.replace(k, v)
+    
+    # Memperbaiki error FPDF
     text = text.replace('\t', ' ')
-    
-    # 2. Paksa penambahan spasi jika ada karakter menyambung lebih dari 60 huruf (misal: URL / garis putus-putus)
     text = re.sub(r'(\S{60})', r'\1 ', text)
-    
     return text.encode("latin-1", errors="ignore").decode("latin-1")
 
 def build_transcript_pdf():
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-
     pdf.set_font("Helvetica", "B", 14)
-    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(0, 8, _pdf_sanitize("RUANG AMAN - RINGKASAN PERCAKAPAN"), align="C")
-    pdf.ln(2)
-
+    pdf.ln(4)
     pdf.set_font("Helvetica", "", 10)
-    meta = [
-        f"Sesi dimulai   : {st.session_state.session_started.strftime('%d %B %Y, %H:%M:%S')}",
-        f"Diunduh pada   : {datetime.now().strftime('%d %B %Y, %H:%M:%S')}",
-        f"Mode konseling : {MENU_LABELS.get(st.session_state.active_menu, '-')}",
-        f"Jumlah pesan   : {len(st.session_state.messages)}",
-    ]
-    for line in meta:
-        pdf.set_x(pdf.l_margin)
-        pdf.multi_cell(0, 6, _pdf_sanitize(line))
-
-    pdf.ln(3)
-    pdf.set_draw_color(150, 150, 150)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-
     for m in st.session_state.messages:
         who = "USER" if m["role"] == "user" else "RUANG AMAN"
-        ts = m.get("time")
-        ts_str = ts.strftime("%H:%M:%S") if ts else "-"
-
         pdf.set_font("Helvetica", "B", 10)
-        pdf.set_x(pdf.l_margin)
-        pdf.multi_cell(0, 6, _pdf_sanitize(f"[{ts_str}] {who}:"))
-
+        pdf.multi_cell(0, 6, _pdf_sanitize(f"{who}:"))
         pdf.set_font("Helvetica", "", 10)
-        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(0, 6, _pdf_sanitize(m["content"]))
         pdf.ln(2)
-
-    pdf.set_draw_color(150, 150, 150)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(4)
-
-    pdf.set_font("Helvetica", "I", 8)
-    for line in [
-        "Dokumen ini dibuat otomatis oleh Ruang Aman.",
-        "Bukan pengganti dokumen resmi kepolisian/lembaga hukum.",
-        "Darurat? Hubungi SAPA 129.",
-    ]:
-        pdf.set_x(pdf.l_margin)
-        pdf.multi_cell(0, 5, _pdf_sanitize(line))
-
     return bytes(pdf.output())
 
+# Initialize State
 for k, v in [("messages", []), ("active_menu", "konseling"), ("pending", None), ("text_size", "Sedang"), ("last_emotion_result", None)]:
     if k not in st.session_state: st.session_state[k] = v
-if "session_started" not in st.session_state:
-    st.session_state.session_started = datetime.now()
-
 
 inject_css(T)
 
-FONT_SIZES = {
-    "Kecil":  {"chat": "13px",   "input": "13px"},
-    "Sedang": {"chat": "14.8px", "input": "15px"},
-    "Besar":  {"chat": "18px",   "input": "18px"},
-}
-
-def inject_text_size_css(size_label):
-    s = FONT_SIZES.get(size_label, FONT_SIZES["Sedang"])
-    st.markdown(f"""
-    <style>
-    [data-testid="stChatMessageContent"] p, [data-testid="stChatMessageContent"] li {{
-        font-size: {s['chat']} !important;
-        line-height: 1.75 !important;
-    }}
-    [data-testid="stChatInput"] textarea {{
-        font-size: {s['input']} !important;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-# ===================== PANIC EXIT — tombol darurat, fixed, selalu terlihat =====================
+# ===================== PANIC EXIT =====================
 panic_exit_html = """
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-    body {
-        background: transparent;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        overflow: hidden;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        height: 100%;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; display: flex; justify-content: flex-end; align-items: center; height: 100%; }
     .panic-btn {
-        background-color: #D8342A;
-        color: #FFFFFF;
-        font-weight: 800;
-        border: none;
-        border-radius: 999px;
-        padding: 8px 18px;
-        font-size: 13px;
-        cursor: pointer;
-        box-shadow: 0 4px 14px rgba(216, 52, 42, .4);
-        white-space: nowrap; /* Mencegah teks terlipat jadi 2 baris */
-        transition: background 0.2s ease, transform 0.1s ease;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        background-color: #D8342A; color: #FFFFFF; font-weight: 800; border: none;
+        border-radius: 999px; padding: 8px 18px; font-size: 13px; cursor: pointer;
+        box-shadow: 0 4px 14px rgba(216, 52, 42, .4); white-space: nowrap;
     }
-    .panic-btn:hover {
-        background-color: #B92A21;
-    }
-    .panic-btn:active {
-        transform: scale(0.96);
-    }
+    .panic-btn:hover { background-color: #B92A21; }
 </style>
 </head>
 <body>
-    <button onclick="emergencyExit()" class="panic-btn">🚨 Keluar Cepat</button>
-
-    <script>
-    function emergencyExit() {
-        try {
-            window.top.location.replace("https://www.google.com");
-        } catch (e) {
-            window.open("https://www.google.com", "_blank");
-            window.location.href = "https://www.google.com";
-        }
-    }
-    </script>
+    <button onclick="window.top.location.replace('https://www.google.com');" class="panic-btn">🚨 Keluar Cepat</button>
 </body>
 </html>
 """
 
-# Berikan wadah fixed dengan lebar 180px dan tinggi 45px agar tombol muat sempurna
 st.markdown("""
 <style>
-div.st-key-panic_component {
-    position: fixed !important;
-    top: 10px !important;
-    right: 20px !important;
-    z-index: 9999999 !important;
-    width: 180px !important;
-    height: 45px !important;
-}
-div.st-key-panic_component iframe {
-    width: 100% !important;
-    height: 100% !important;
-    border: none !important;
-}
+div.st-key-panic_component { position: fixed !important; top: 12px !important; right: 20px !important; z-index: 9999999 !important; width: 180px !important; height: 48px !important; }
+div.st-key-panic_component iframe { width: 100% !important; height: 100% !important; border: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
 with st.container(key="panic_component"):
-    components_html(panic_exit_html, height=42, scrolling=False)
+    components_html(panic_exit_html, height=45, scrolling=False)
+
 # ===================== SIDEBAR =====================
-mode_key = st.session_state.active_menu
-inject_text_size_css(st.session_state.text_size)
-
 with st.sidebar:
-    st.markdown(
-        f'<div class="sidebar-logo-wrap"><div class="sidebar-logo">{LOGO_SVG}</div></div>'
-        '<div class="sidebar-brand-title">Ruang Aman</div>'
-        '<div class="sidebar-brand-sub">Privasi terjaga, Ceritamu berharga!</div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-logo-wrap"><div class="sidebar-logo">{LOGO_SVG}</div></div><div class="sidebar-brand-title">Ruang Aman</div><div class="sidebar-brand-sub">Privasi terjaga, Ceritamu berharga!</div>', unsafe_allow_html=True)
 
-    if st.button("➕  Konsultasi baru", use_container_width=True):
+    if st.button("➕ Konsultasi baru", use_container_width=True):
         st.session_state.messages = []; st.session_state.pending = None; st.rerun()
 
     if st.session_state.messages:
-        st.download_button(
-            "💾  Simpan Percakapan (PDF)",
-            data=build_transcript_pdf(),
-            file_name=f"ruang-aman_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
+        st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
 
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    # ==== LOGIKA API KEY GEMINI YANG SUDAH DIPERBAIKI ====
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        api_key = st.text_input("\U0001f511 Groq API Key", type="password")
-
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = ""
+    
+    if not api_key:
+        api_key = st.text_input("🔑 Gemini API Key", type="password")
+    # =====================================================
 
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
-        if st.button(f"{emoji}  {label}", key=f"menu_{key}", use_container_width=True,
-                     type="primary" if is_active else "secondary"):
+        if st.button(f"{emoji} {label}", key=f"menu_{key}", use_container_width=True, type="primary" if is_active else "secondary"):
             st.session_state.active_menu = key
             st.rerun()
 
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-    tampilkan_emosi = st.checkbox(
-        "\U0001f4ad Tampilkan mode percakapan",
-        value=False,
-        help="Menampilkan bagaimana Ruang Aman menyesuaikan gaya responsnya berdasarkan konteks percakapan."
-    )
-
+    tampilkan_emosi = st.checkbox("💭 Tampilkan mode percakapan", value=False)
     if tampilkan_emosi:
         last = st.session_state.get("last_emotion_result")
-
         emoji_map = {"sadness": "🫂", "fear": "🏡", "anger": "🍃", "happy": "🥰", "love": "💖"}
-        current_emoji = emoji_map.get(last["label_dominan"], "💬") if last else "💬"
-
+        current_emoji = emoji_map.get(last["emosi"], "💬") if last else "💬"
         current_label = last["ai_label"] if last else "Siap membantu proses konselingmu."
-
-        st.markdown(f"""
-            <div style="padding:12px; border-radius:14px; background-color:rgba(255,255,255,0.35); text-align:center;">
-                <div style="font-size:28px;">{current_emoji}</div>
-                <div style="font-size:13px; margin-top:4px; color:{T['navy']}; font-weight:500;">{current_label}</div>
-            </div>""", unsafe_allow_html=True)
-        st.caption("⚠️ Estimasi otomatis berdasarkan pesan terakhirmu.")
-
-    with st.expander("⚙️  Pengaturan"):
-        st.markdown("""
-            <div class="settings-info-card">
-                <div class="settings-info-title">🚨 Keluar Cepat</div>
-                <div class="settings-info-desc">
-                    Tombol merah di pojok kiri atas akan langsung menghapus seluruh riwayat obrolan secara permanen dan mengalihkan browser ke Google demi menjaga privasimu.
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-        size_choice = st.radio(
-            "🔠 Ukuran teks",
-            options=["Kecil", "Sedang", "Besar"],
-            index=["Kecil", "Sedang", "Besar"].index(st.session_state.text_size),
-            horizontal=True,
-            key="text_size_radio",
-        )
-        st.session_state.text_size = size_choice
-
-    with st.expander("📞  Bantuan Langsung"):
-        st.markdown("""
-            <div class="emergency-card">
-                <div class="emergency-title">SAPA 129</div>
-                <div class="emergency-subtitle">Hotline Kekerasan Seksual</div>
-                <div class="emergency-desc">
-                    Layanan pendampingan resmi yang tersedia 24 jam melalui panggilan telepon langsung atau chat WhatsApp.
-                </div>
-                <a href="https://wa.me/628111129129" target="_blank" class="emergency-btn">
-                    💬 Hubungi WhatsApp
-                </a>
-            </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown('<div class="disclaimer">Ruang Aman memberi informasi berbasis UU No. 12 Tahun 2022. '
-                'Bukan pengganti advokat/lembaga resmi. Darurat? <b>SAPA 129</b>.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="padding:12px; border-radius:14px; background-color:rgba(255,255,255,0.35); text-align:center;"><div style="font-size:28px;">{current_emoji}</div><div style="font-size:13px; margin-top:4px; color:{T["navy"]}; font-weight:500;">{current_label}</div></div>', unsafe_allow_html=True)
 
 mode_key = st.session_state.active_menu
 
 # Header Utama
 st.markdown(f'<div class="main-chat-header"><div class="logo-badge">{LOGO_SVG}</div><div class="title">Ruang Aman</div><div class="subtitle">Kamu tidak sendirian. Kami mendengarkan.</div></div>', unsafe_allow_html=True)
 
-st.markdown(f"""
-    <div class="main-chat-header">
-        <div class="logo-badge">{LOGO_SVG}</div>
-        <div class="title">Ruang Aman</div>
-        <div class="subtitle">Kamu tidak sendirian. Kami mendengarkan.</div>
-    </div>
-""", unsafe_allow_html=True)
-
-# ===================== 6 FITUR (hanya saat belum ada percakapan) =====================
+# Grid Fitur Utama
 if not st.session_state.messages:
     fitur_container = st.container(key="fitur_grid")
     with fitur_container:
@@ -1256,26 +544,14 @@ if not st.session_state.messages:
                 if st.button(f"{j}\n\n{d}", key=f"f{i}", use_container_width=True):
                     st.session_state.pending = p; st.rerun()
 
+# Display Chat Messages
 if st.session_state.messages:
     st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
     for m in st.session_state.messages:
-        with st.chat_message(m["role"], avatar="\U0001f49b" if m["role"] == "assistant" else "\U0001f464"):
+        with st.chat_message(m["role"], avatar="💛" if m["role"] == "assistant" else "👤"):
             st.markdown(m["content"])
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ===================== SUGGESTION CHIPS =====================
-chip_container = st.container(key="chip_row")
-with chip_container:
-    chip_cols = st.columns(3)
-    CHIPS = [
-        ("Bagaimana cara lapor?", "Bagaimana cara melapor kasus kekerasan seksual?"),
-        ("UU TPKS", "Apa saja jenis tindak pidana kekerasan seksual dalam UU TPKS?"),
-        ("Butuh psikolog", "Saya butuh pendampingan psikologis, ke mana saya bisa mencari bantuan?"),
-    ]
-    for i, (label, prompt) in enumerate(CHIPS):
-        with chip_cols[i]:
-            if st.button(label, key=f"chip_{i}", use_container_width=True):
-                st.session_state.pending = prompt; st.rerun()
 # Input Bar & Transkripsi Audio
 prompt = st.chat_input("Tuliskan pesanmu di sini...", accept_audio=True, audio_sample_rate=16000)
 user_input = None
@@ -1296,7 +572,7 @@ if st.session_state.pending and not user_input:
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now()})
     
-    # 1. Analisis Emosi via Groq AI (Cepat & Tanpa Model Lokal)
+    # 1. Analisis Emosi via Gemini AI
     support_info = analyze_emotion_and_label_via_gemini(api_key, user_input)
     st.session_state["last_emotion_result"] = support_info
 
@@ -1308,7 +584,7 @@ if user_input:
                 st.markdown(f'<div class="support-banner">{banner}</div>', unsafe_allow_html=True)
 
         if not api_key:
-            ans = "⚠️ Gemini API Key belum ada. Silakan atur Secrets GEMINI_API_KEY di Streamlit Cloud."
+            ans = "⚠️ Gemini API Key belum ada. Silakan atur Variables GEMINI_API_KEY di Railway."
             st.markdown(ans)
         else:
             ans = st.write_stream(gemini_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
