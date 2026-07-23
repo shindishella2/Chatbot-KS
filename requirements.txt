@@ -18,3 +18,4 @@ fpdf2==2.8.7
 python-dotenv==1.1.0
 numpy==1.26.4
 google-genai
+psutil==7.0.0
