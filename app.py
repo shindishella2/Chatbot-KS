@@ -2,8 +2,6 @@ import random
 import re
 import time, faiss, numpy as np, pickle, os
 from datetime import datetime
-import streamlit as st
-from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
 import json
 from google import genai
@@ -1209,7 +1207,7 @@ div.st-key-panic_component iframe {
 """, unsafe_allow_html=True)
 
 with st.container(key="panic_component"):
-    components_html(panic_exit_html, height=42, scrolling=False)
+    st.iframe(panic_exit_html, height=42)
 # ===================== SIDEBAR =====================
 mode_key = st.session_state.active_menu
 inject_text_size_css(st.session_state.text_size)
