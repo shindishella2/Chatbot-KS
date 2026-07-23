@@ -966,96 +966,281 @@ def build_transcript_pdf():
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+
     pdf.set_font("Helvetica", "B", 14)
+    pdf.set_x(pdf.l_margin)
     pdf.multi_cell(0, 8, _pdf_sanitize("RUANG AMAN - RINGKASAN PERCAKAPAN"), align="C")
-    pdf.ln(4)
+    pdf.ln(2)
+
     pdf.set_font("Helvetica", "", 10)
+    meta = [
+        f"Sesi dimulai   : {st.session_state.session_started.strftime('%d %B %Y, %H:%M:%S')}",
+        f"Diunduh pada   : {datetime.now().strftime('%d %B %Y, %H:%M:%S')}",
+        f"Mode konseling : {MENU_LABELS.get(st.session_state.active_menu, '-')}",
+        f"Jumlah pesan   : {len(st.session_state.messages)}",
+    ]
+    for line in meta:
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(0, 6, _pdf_sanitize(line))
+
+    pdf.ln(3)
+    pdf.set_draw_color(150, 150, 150)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+
     for m in st.session_state.messages:
         who = "USER" if m["role"] == "user" else "RUANG AMAN"
+        ts = m.get("time")
+        ts_str = ts.strftime("%H:%M:%S") if ts else "-"
+
         pdf.set_font("Helvetica", "B", 10)
-        pdf.multi_cell(0, 6, _pdf_sanitize(f"{who}:"))
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(0, 6, _pdf_sanitize(f"[{ts_str}] {who}:"))
+
         pdf.set_font("Helvetica", "", 10)
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(0, 6, _pdf_sanitize(m["content"]))
         pdf.ln(2)
+
+    pdf.set_draw_color(150, 150, 150)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "I", 8)
+    for line in [
+        "Dokumen ini dibuat otomatis oleh Ruang Aman.",
+        "Bukan pengganti dokumen resmi kepolisian/lembaga hukum.",
+        "Darurat? Hubungi SAPA 129.",
+    ]:
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(0, 5, _pdf_sanitize(line))
+
     return bytes(pdf.output())
 
-# Initialize State
 for k, v in [("messages", []), ("active_menu", "konseling"), ("pending", None), ("text_size", "Sedang"), ("last_emotion_result", None)]:
     if k not in st.session_state: st.session_state[k] = v
+if "session_started" not in st.session_state:
+    st.session_state.session_started = datetime.now()
+
 
 inject_css(T)
 
-# ===================== PANIC EXIT =====================
+FONT_SIZES = {
+    "Kecil":  {"chat": "13px",   "input": "13px"},
+    "Sedang": {"chat": "14.8px", "input": "15px"},
+    "Besar":  {"chat": "18px",   "input": "18px"},
+}
+
+def inject_text_size_css(size_label):
+    s = FONT_SIZES.get(size_label, FONT_SIZES["Sedang"])
+    st.markdown(f"""
+    <style>
+    [data-testid="stChatMessageContent"] p, [data-testid="stChatMessageContent"] li {{
+        font-size: {s['chat']} !important;
+        line-height: 1.75 !important;
+    }}
+    [data-testid="stChatInput"] textarea {{
+        font-size: {s['input']} !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ===================== PANIC EXIT — tombol darurat, fixed, selalu terlihat =====================
 panic_exit_html = """
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: transparent; overflow: hidden; display: flex; justify-content: flex-end; align-items: center; height: 100%; }
-    .panic-btn {
-        background-color: #D8342A; color: #FFFFFF; font-weight: 800; border: none;
-        border-radius: 999px; padding: 8px 18px; font-size: 13px; cursor: pointer;
-        box-shadow: 0 4px 14px rgba(216, 52, 42, .4); white-space: nowrap;
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
     }
-    .panic-btn:hover { background-color: #B92A21; }
+    body {
+        background: transparent;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        overflow: hidden;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        height: 100%;
+    }
+    .panic-btn {
+        background-color: #D8342A;
+        color: #FFFFFF;
+        font-weight: 800;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 18px;
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(216, 52, 42, .4);
+        white-space: nowrap; /* Mencegah teks terlipat jadi 2 baris */
+        transition: background 0.2s ease, transform 0.1s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .panic-btn:hover {
+        background-color: #B92A21;
+    }
+    .panic-btn:active {
+        transform: scale(0.96);
+    }
 </style>
 </head>
 <body>
-    <button onclick="window.top.location.replace('https://www.google.com');" class="panic-btn">🚨 Keluar Cepat</button>
+    <button onclick="emergencyExit()" class="panic-btn">🚨 Keluar Cepat</button>
+
+    <script>
+    function emergencyExit() {
+        try {
+            window.top.location.replace("https://www.google.com");
+        } catch (e) {
+            window.open("https://www.google.com", "_blank");
+            window.location.href = "https://www.google.com";
+        }
+    }
+    </script>
 </body>
 </html>
 """
 
+# Berikan wadah fixed dengan lebar 180px dan tinggi 45px agar tombol muat sempurna
 st.markdown("""
 <style>
-div.st-key-panic_component { position: fixed !important; top: 12px !important; right: 20px !important; z-index: 9999999 !important; width: 180px !important; height: 48px !important; }
-div.st-key-panic_component iframe { width: 100% !important; height: 100% !important; border: none !important; }
+div.st-key-panic_component {
+    position: fixed !important;
+    top: 10px !important;
+    right: 20px !important;
+    z-index: 9999999 !important;
+    width: 180px !important;
+    height: 45px !important;
+}
+div.st-key-panic_component iframe {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 with st.container(key="panic_component"):
-    components_html(panic_exit_html, height=45, scrolling=False)
-
+    components_html(panic_exit_html, height=42, scrolling=False)
 # ===================== SIDEBAR =====================
-with st.sidebar:
-    st.markdown(f'<div class="sidebar-logo-wrap"><div class="sidebar-logo">{LOGO_SVG}</div></div><div class="sidebar-brand-title">Ruang Aman</div><div class="sidebar-brand-sub">Privasi terjaga, Ceritamu berharga!</div>', unsafe_allow_html=True)
+mode_key = st.session_state.active_menu
+inject_text_size_css(st.session_state.text_size)
 
-    if st.button("➕ Konsultasi baru", use_container_width=True):
+with st.sidebar:
+    st.markdown(
+        f'<div class="sidebar-logo-wrap"><div class="sidebar-logo">{LOGO_SVG}</div></div>'
+        '<div class="sidebar-brand-title">Ruang Aman</div>'
+        '<div class="sidebar-brand-sub">Privasi terjaga, Ceritamu berharga!</div>',
+        unsafe_allow_html=True)
+
+    if st.button("➕  Konsultasi baru", use_container_width=True):
         st.session_state.messages = []; st.session_state.pending = None; st.rerun()
 
     if st.session_state.messages:
-        st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
-    # Cek dari sistem operasi (Railway) terlebih dahulu
-    api_key = os.environ.get("GEMINI_API_KEY")
-    
-    # Kalau di OS tidak ada (misal jalan di komputer lokal), coba cari di file secrets
+        st.download_button(
+            "💾  Simpan Percakapan (PDF)",
+            data=build_transcript_pdf(),
+            file_name=f"ruang-aman_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+    api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        try:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            api_key = ""
+        api_key = st.text_input("\U0001f511 Groq API Key", type="password")
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
-        if st.button(f"{emoji} {label}", key=f"menu_{key}", use_container_width=True, type="primary" if is_active else "secondary"):
+        if st.button(f"{emoji}  {label}", key=f"menu_{key}", use_container_width=True,
+                     type="primary" if is_active else "secondary"):
             st.session_state.active_menu = key
             st.rerun()
 
-    tampilkan_emosi = st.checkbox("💭 Tampilkan mode percakapan", value=False)
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+    tampilkan_emosi = st.checkbox(
+        "\U0001f4ad Tampilkan mode percakapan",
+        value=False,
+        help="Menampilkan bagaimana Ruang Aman menyesuaikan gaya responsnya berdasarkan konteks percakapan."
+    )
+
     if tampilkan_emosi:
         last = st.session_state.get("last_emotion_result")
+
         emoji_map = {"sadness": "🫂", "fear": "🏡", "anger": "🍃", "happy": "🥰", "love": "💖"}
-        current_emoji = emoji_map.get(last["emosi"], "💬") if last else "💬"
+        current_emoji = emoji_map.get(last["label_dominan"], "💬") if last else "💬"
+
         current_label = last["ai_label"] if last else "Siap membantu proses konselingmu."
-        st.markdown(f'<div style="padding:12px; border-radius:14px; background-color:rgba(255,255,255,0.35); text-align:center;"><div style="font-size:28px;">{current_emoji}</div><div style="font-size:13px; margin-top:4px; color:{T["navy"]}; font-weight:500;">{current_label}</div></div>', unsafe_allow_html=True)
+
+        st.markdown(f"""
+            <div style="padding:12px; border-radius:14px; background-color:rgba(255,255,255,0.35); text-align:center;">
+                <div style="font-size:28px;">{current_emoji}</div>
+                <div style="font-size:13px; margin-top:4px; color:{T['navy']}; font-weight:500;">{current_label}</div>
+            </div>""", unsafe_allow_html=True)
+        st.caption("⚠️ Estimasi otomatis berdasarkan pesan terakhirmu.")
+
+    with st.expander("⚙️  Pengaturan"):
+        st.markdown("""
+            <div class="settings-info-card">
+                <div class="settings-info-title">🚨 Keluar Cepat</div>
+                <div class="settings-info-desc">
+                    Tombol merah di pojok kiri atas akan langsung menghapus seluruh riwayat obrolan secara permanen dan mengalihkan browser ke Google demi menjaga privasimu.
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        size_choice = st.radio(
+            "🔠 Ukuran teks",
+            options=["Kecil", "Sedang", "Besar"],
+            index=["Kecil", "Sedang", "Besar"].index(st.session_state.text_size),
+            horizontal=True,
+            key="text_size_radio",
+        )
+        st.session_state.text_size = size_choice
+
+    with st.expander("📞  Bantuan Langsung"):
+        st.markdown("""
+            <div class="emergency-card">
+                <div class="emergency-title">SAPA 129</div>
+                <div class="emergency-subtitle">Hotline Kekerasan Seksual</div>
+                <div class="emergency-desc">
+                    Layanan pendampingan resmi yang tersedia 24 jam melalui panggilan telepon langsung atau chat WhatsApp.
+                </div>
+                <a href="https://wa.me/628111129129" target="_blank" class="emergency-btn">
+                    💬 Hubungi WhatsApp
+                </a>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="disclaimer">Ruang Aman memberi informasi berbasis UU No. 12 Tahun 2022. '
+                'Bukan pengganti advokat/lembaga resmi. Darurat? <b>SAPA 129</b>.</div>', unsafe_allow_html=True)
 
 mode_key = st.session_state.active_menu
 
 # Header Utama
 st.markdown(f'<div class="main-chat-header"><div class="logo-badge">{LOGO_SVG}</div><div class="title">Ruang Aman</div><div class="subtitle">Kamu tidak sendirian. Kami mendengarkan.</div></div>', unsafe_allow_html=True)
 
-# Grid Fitur Utama (Hanya Tampil Jika Belum Ada Chat)
+st.markdown(f"""
+    <div class="main-chat-header">
+        <div class="logo-badge">{LOGO_SVG}</div>
+        <div class="title">Ruang Aman</div>
+        <div class="subtitle">Kamu tidak sendirian. Kami mendengarkan.</div>
+    </div>
+""", unsafe_allow_html=True)
+
+# ===================== 6 FITUR (hanya saat belum ada percakapan) =====================
 if not st.session_state.messages:
     fitur_container = st.container(key="fitur_grid")
     with fitur_container:
@@ -1065,14 +1250,26 @@ if not st.session_state.messages:
                 if st.button(f"{j}\n\n{d}", key=f"f{i}", use_container_width=True):
                     st.session_state.pending = p; st.rerun()
 
-# Display Chat Messages
 if st.session_state.messages:
     st.markdown('<div class="glass-panel">', unsafe_allow_html=True)
     for m in st.session_state.messages:
-        with st.chat_message(m["role"], avatar="💛" if m["role"] == "assistant" else "👤"):
+        with st.chat_message(m["role"], avatar="\U0001f49b" if m["role"] == "assistant" else "\U0001f464"):
             st.markdown(m["content"])
     st.markdown('</div>', unsafe_allow_html=True)
 
+# ===================== SUGGESTION CHIPS =====================
+chip_container = st.container(key="chip_row")
+with chip_container:
+    chip_cols = st.columns(3)
+    CHIPS = [
+        ("Bagaimana cara lapor?", "Bagaimana cara melapor kasus kekerasan seksual?"),
+        ("UU TPKS", "Apa saja jenis tindak pidana kekerasan seksual dalam UU TPKS?"),
+        ("Butuh psikolog", "Saya butuh pendampingan psikologis, ke mana saya bisa mencari bantuan?"),
+    ]
+    for i, (label, prompt) in enumerate(CHIPS):
+        with chip_cols[i]:
+            if st.button(label, key=f"chip_{i}", use_container_width=True):
+                st.session_state.pending = prompt; st.rerun()
 # Input Bar & Transkripsi Audio
 prompt = st.chat_input("Tuliskan pesanmu di sini...", accept_audio=True, audio_sample_rate=16000)
 user_input = None
