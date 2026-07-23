@@ -1,0 +1,98 @@
+# ======================================================
+# Chatbot Hukum TPKS - Development Requirements
+# Digunakan untuk menjalankan notebook dari awal
+# (OCR -> Chunking -> Embedding -> FAISS -> Emotion Model)
+#
+# Catatan:
+# Jangan install torch dari file ini.
+# Install torch CPU terlebih dahulu menggunakan:
+#
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#
+# ======================================================
+
+# ==========================
+# Core
+# ==========================
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+
+# ==========================
+# Visualization
+# ==========================
+matplotlib>=3.9
+seaborn>=0.13
+
+# ==========================
+# Machine Learning
+# ==========================
+scikit-learn>=1.5
+joblib>=1.4
+
+# ==========================
+# NLP
+# ==========================
+transformers>=4.44
+sentence-transformers>=3.0
+tokenizers>=0.19
+accelerate>=0.34
+
+# ==========================
+# Vector Database
+# ==========================
+faiss-cpu>=1.8
+
+# ==========================
+# LLM API
+# ==========================
+groq>=0.9
+
+# ==========================
+# OCR
+# ==========================
+paddlepaddle
+paddleocr>=2.8
+pdf2image>=1.17
+opencv-python>=4.10
+Pillow>=10.4
+
+# ==========================
+# PDF
+# ==========================
+PyPDF2>=3.0
+pypdf>=4.3
+
+# ==========================
+# Utilities
+# ==========================
+python-dotenv>=1.0
+tqdm>=4.66
+requests>=2.32
+regex>=2024.7
+
+# ==========================
+# Notebook
+# ==========================
+jupyter
+jupyterlab
+ipykernel
+ipywidgets
+notebook
+
+# ==========================
+# Streamlit
+# ==========================
+streamlit>=1.37
+
+# ==========================
+# Serialization
+# ==========================
+dill
+cloudpickle
+
+# ==========================
+# Optional
+# ==========================
+openpyxl
+xlrd
