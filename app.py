@@ -1,6 +1,7 @@
 import os
 import random
 import re
+import json
 import pickle
 from datetime import datetime
 from fpdf import FPDF
@@ -9,8 +10,8 @@ import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
-import json
+from google import genai
+from google.genai import types
 
 # Set Page Config
 st.set_page_config(
@@ -34,14 +35,14 @@ index, chunks = load_store()
 
 # ===================== DYNAMIC EMOTION VIA GEMINI AI =====================
 def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
-    """Menggunakan Gemini untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
+    """Menggunakan Gemini AI untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
     if not api_key:
         return {
             "emosi": "neutral",
             "perlu_rujukan": False,
             "ai_label": "Siap membantu dan mendengarkan ceritamu."
         }
-    
+
     system_prompt = (
         "Kamu adalah sistem pengolah emosi untuk chatbot konseling kekerasan seksual.\n"
         "Tugasmu menganalisis pesan user dan menghasilkan output dalam format JSON MURNI (tanpa markdown/penjelasan tambahan):\n"
@@ -54,16 +55,18 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
         "- Set 'perlu_rujukan' = true HANYA jika emosi user tergolong 'sadness', 'fear', atau distress berat.\n"
         "- Bahasa pada 'ai_label' harus santai, empati, tanpa tanda kutip, seperti teman dekat."
     )
-    
+
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            "gemini-1.5-flash",
-            system_instruction=system_prompt
-        )
-        response = model.generate_content(
-            user_text,
-            generation_config={"response_mime_type": "application/json"}
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=f"Pesan user: {user_text}",
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.3,
+                max_output_tokens=150,
+                response_mime_type="application/json",
+            ),
         )
         res = json.loads(response.text)
         return {
@@ -71,8 +74,7 @@ def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
             "perlu_rujukan": res.get("perlu_rujukan", False),
             "ai_label": res.get("ai_label", "Siap membantu proses konselingmu.")
         }
-    except Exception as e:
-        print(f"Error pada deteksi emosi: {e}")
+    except Exception:
         return {
             "emosi": "neutral",
             "perlu_rujukan": False,
@@ -130,11 +132,7 @@ def inject_css(t):
     html, body, [class*="css"], .stMarkdown, p, span, label, div {{ font-family:'Inter',sans-serif; }}
     h1,h2,h3, .hero-title, .brand h1 {{ font-family:'Plus Jakarta Sans',sans-serif; }}
     #MainMenu, footer {{ visibility:hidden; }}
-    header[data-testid="stHeader"] {{ background:transparent; display:none !important; }}
-    [data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"],
-    [data-testid="collapsedControl"] {{ visibility:visible !important; }}
-    [data-testid="stSidebarCollapsedControl"] svg, [data-testid="stSidebarCollapseButton"] svg,
-    [data-testid="collapsedControl"] svg {{ fill:{t['navy']} !important; color:{t['navy']} !important; }}
+    header[data-testid="stHeader"] {{ display:none !important; }}
     .block-container {{ max-width:860px; padding-top:2rem !important; }}
 
     .glass-panel {{
@@ -148,7 +146,6 @@ def inject_css(t):
         box-shadow: 0 8px 32px rgba(14,27,72,.18);
     }}
 
-    /* ============ HEADER UTAMA ============ */
     .main-chat-header {{ text-align:center; margin:4px 0 18px; }}
     .main-chat-header .logo-badge {{
         width:56px; height:56px; margin:0 auto 12px; border-radius:16px;
@@ -172,13 +169,8 @@ def inject_css(t):
         color:{t['header_sub']};
     }}
 
-    /* ============ KARTU 6 FITUR ============ */
-    .st-key-fitur_grid [data-testid="column"] {{
-        display: flex;
-    }}
-    .st-key-fitur_grid div.stButton {{
-        width: 100%;
-    }}
+    .st-key-fitur_grid [data-testid="column"] {{ display: flex; }}
+    .st-key-fitur_grid div.stButton {{ width: 100%; }}
     .st-key-fitur_grid div.stButton > button {{
         height: 92px !important;
         display: flex !important;
@@ -199,28 +191,13 @@ def inject_css(t):
         background:linear-gradient(135deg, {t['navy']} 0%, {t['mauve']} 100%) !important;
     }}
 
-    /* ============ CHAT BUBBLE ============ */
     [data-testid="stChatMessage"] {{ background:transparent; border:none; padding:4px 0; gap:12px; }}
     [data-testid="stChatMessageContent"] {{
         max-width: 680px;
         border-radius:18px; padding:13px 18px;
         box-shadow:0 3px 10px rgba(14,27,72,.12);
     }}
-    [data-testid="stChatMessageContent"] p, [data-testid="stChatMessageContent"] li {{
-        font-size:14.8px; line-height:1.7;
-    }}
-    [data-testid="stChatMessage"] > div:first-child,
-    [data-testid="stChatMessage"] [data-testid*="Avatar" i],
-    [data-testid="stChatMessage"] [data-testid*="avatar" i] {{
-        background: linear-gradient(135deg, {t['mauve']} 0%, {t['active']} 100%) !important;
-        border-radius: 12px !important;
-        overflow: hidden;
-    }}
-    [data-testid="stChatMessage"] > div:first-child *,
-    [data-testid="stChatMessage"] [data-testid*="Avatar" i] *,
-    [data-testid="stChatMessage"] [data-testid*="avatar" i] * {{
-        background: transparent !important;
-    }}
+
     div[data-testid="stChatMessage"]:nth-of-type(odd) {{
         flex-direction: row-reverse;
         justify-content: flex-start;
@@ -229,11 +206,10 @@ def inject_css(t):
         background:{t['user_bg']}; border:1.5px solid {t['user_border']};
         margin-left: auto;
     }}
-    div[data-testid="stChatMessage"]:nth-of-type(odd) [data-testid="stChatMessageContent"] p,
-    div[data-testid="stChatMessage"]:nth-of-type(odd) [data-testid="stChatMessageContent"] li,
-    div[data-testid="stChatMessage"]:nth-of-type(odd) [data-testid="stChatMessageContent"] strong {{
+    div[data-testid="stChatMessage"]:nth-of-type(odd) [data-testid="stChatMessageContent"] p {{
         color:{t['user_text']} !important;
     }}
+
     div[data-testid="stChatMessage"]:nth-of-type(even) {{
         flex-direction: row;
         justify-content: flex-start;
@@ -242,18 +218,16 @@ def inject_css(t):
         background:{t['bot_bg']}; border:1.5px solid {t['bot_border']};
         margin-right: auto;
     }}
-    div[data-testid="stChatMessage"]:nth-of-type(even) [data-testid="stChatMessageContent"] p,
-    div[data-testid="stChatMessage"]:nth-of-type(even) [data-testid="stChatMessageContent"] li,
-    div[data-testid="stChatMessage"]:nth-of-type(even) [data-testid="stChatMessageContent"] strong {{
+    div[data-testid="stChatMessage"]:nth-of-type(even) [data-testid="stChatMessageContent"] p {{
         color:{t['bot_text']} !important;
     }}
 
-    /* ============ SIDEBAR ============ */
     section[data-testid="stSidebar"] {{
         background:linear-gradient(180deg, {t['sidebar_top']} 0%, {t['sidebar_bottom']} 100%);
         border-right:1px solid rgba(14,27,72,.08);
     }}
     section[data-testid="stSidebar"] * {{ color:{t['navy']}; }}
+
     .sidebar-logo-wrap {{ text-align:center; margin-top:6px; margin-bottom:10px; }}
     .sidebar-logo {{
         width:56px; height:56px; margin:0 auto; border-radius:50%;
@@ -270,58 +244,32 @@ def inject_css(t):
         text-align:center; font-style:italic; font-size:12px; color:{t['navy']};
         margin-bottom:14px; opacity:.85;
     }}
+
     section[data-testid="stSidebar"] div.stButton > button {{
         background:{t['navy']}; color:#fff !important; border:none; font-weight:600;
         border-radius:14px; padding:12px 14px; box-shadow:0 6px 14px rgba(14,27,72,.2);
     }}
-    section[data-testid="stSidebar"] div.stButton > button:hover {{ filter:brightness(1.15); }}
-    section[data-testid="stSidebar"] div.stButton > button p {{ color:#fff !important; }}
-    section[data-testid="stSidebar"] button[kind="secondary"],
-    section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {{
-        background:transparent !important; color:{t['navy']} !important; font-weight:700 !important;
-        border:1.5px solid transparent !important; box-shadow:none !important; text-align:left !important;
-        border-radius:14px !important;
-    }}
-    section[data-testid="stSidebar"] button[kind="secondary"] p,
-    section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] p {{
-        color:{t['navy']} !important; font-weight:700 !important;
-    }}
-    section[data-testid="stSidebar"] button[kind="secondary"]:hover,
-    section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{
-        background:rgba(241,145,109,.16) !important; border-color:rgba(241,145,109,.4) !important;
-    }}
-    section[data-testid="stSidebar"] button[kind="primary"],
-    section[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {{
+
+    section[data-testid="stSidebar"] button[kind="primary"] {{
         background:{t['active']} !important; color:#FFFFFF !important; font-weight:800 !important;
-        border:3.5px solid {t['active']} !important; border-radius:14px !important; text-align:left !important;
-        box-shadow:0 8px 18px rgba(241,145,109,.45) !important;
-    }}
-    section[data-testid="stSidebar"] button[kind="primary"] p,
-    section[data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] p {{
-        color: #FFFFFF !important;
-        font-weight: 800 !important;
+        border:3.5px solid {t['active']} !important; border-radius:14px !important;
     }}
 
-    /* ============ CHIPS & INPUT ============ */
     .st-key-chip_row div.stButton > button {{
         background:rgba(255,255,255,0.55) !important; color:{t['navy']} !important;
         border:1.5px solid {t['skyblue']} !important; border-radius:999px !important;
         padding:6px 16px !important; font-size:13px !important; font-weight:600 !important;
-        box-shadow:none !important; min-height:auto !important;
     }}
-    .st-key-chip_row div.stButton > button p {{ color:{t['navy']} !important; font-size:13px !important; }}
-    .st-key-chip_row div.stButton > button:hover {{
-        background:{t['mauve']} !important; color:#fff !important; border-color:{t['mauve']} !important;
-    }}
-    .st-key-chip_row div.stButton > button:hover p {{ color:#fff !important; }}
+
     [data-testid="stChatInput"] {{
         background: rgba(255, 255, 255, 0.96) !important;
         border: 1.5px solid {t['skyblue']} !important;
         border-radius: 40px !important;
-        box-shadow: 0 4px 14px rgba(14, 27, 72, 0.15) !important;
     }}
+
     [data-testid="stBottom"] {{ background: {t['deep']} !important; }}
-    div[data-testid="stBottomBlockContainer"] {{ background: {t['deep']} !important; max-width: 100% !important; padding: 0 30px; }}
+    div[data-testid="stBottomBlockContainer"] {{ background: {t['deep']} !important; }}
+
     .disclaimer {{ font-size:11px; line-height:1.55; color:{t['slate']} !important; margin-top:14px; border-top:1px solid rgba(14,27,72,.12); padding-top:12px; }}
     .support-banner {{
         background: rgba(255,255,255,0.6);
@@ -395,47 +343,47 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
 
     user_msg = f"PERTANYAAN PENGGUNA:\n{user_input}\n\nKONTEKS PASAL UU TPKS (relevansi {sim:.0%}):\n{context}"
 
-    # Format history khusus Gemini
+    # Gemini pakai role "user"/"model" (bukan "assistant"), dan system prompt terpisah dari contents
     gemini_history = []
     for h in history[-6:]:
         role = "model" if h["role"] == "assistant" else "user"
-        gemini_history.append({"role": role, "parts": [h["content"]]})
+        gemini_history.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
+    gemini_history.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg)]))
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            "gemini-1.5-pro",
-            system_instruction=system_prompt,
-            generation_config={"temperature": 0.75, "max_output_tokens": 900}
+        client = genai.Client(api_key=api_key)
+        stream = client.models.generate_content_stream(
+            model="gemini-2.5-flash",
+            contents=gemini_history,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.75,
+                max_output_tokens=900,
+            ),
         )
-        chat = model.start_chat(history=gemini_history)
-        stream = chat.send_message(user_msg, stream=True)
         for chunk in stream:
             if chunk.text:
                 yield chunk.text
     except Exception as e:
-        print(f"Error pada gemini_answer: {e}")
-        yield "⚠️ Chatbot sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+        yield "⚠️ Gemini sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
 
-def transcribe_audio(audio_bytes_io):
-    """Kirim audio ke Gemini, kembalikan teks hasil transkripsi (Bahasa Indonesia)."""
+def transcribe_audio(audio_bytes_io, api_key):
     audio_bytes_io.seek(0)
-    audio_part = {
-        "mime_type": "audio/wav", 
-        "data": audio_bytes_io.read()
-    }
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    prompt = "Tolong transkripsikan audio ini ke teks Bahasa Indonesia. Berikan teksnya saja secara persis tanpa tambahan komentar apapun."
-    response = model.generate_content([prompt, audio_part])
+    audio_bytes = audio_bytes_io.read()
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"),
+            "Transkripsikan audio ini ke teks Bahasa Indonesia. Balas HANYA dengan teks "
+            "transkripsinya saja, tanpa embel-embel atau penjelasan tambahan.",
+        ],
+    )
     return response.text.strip()
 
 def _pdf_sanitize(text):
     replacements = {"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "..."}
     for k, v in replacements.items(): text = text.replace(k, v)
-    
-    # Memperbaiki error FPDF
-    text = text.replace('\t', ' ')
-    text = re.sub(r'(\S{60})', r'\1 ', text)
     return text.encode("latin-1", errors="ignore").decode("latin-1")
 
 def build_transcript_pdf():
@@ -503,17 +451,9 @@ with st.sidebar:
     if st.session_state.messages:
         st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
 
-    # ==== LOGIKA API KEY GEMINI YANG SUDAH DIPERBAIKI ====
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        try:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            api_key = ""
-    
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         api_key = st.text_input("🔑 Gemini API Key", type="password")
-    # =====================================================
 
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
@@ -534,7 +474,7 @@ mode_key = st.session_state.active_menu
 # Header Utama
 st.markdown(f'<div class="main-chat-header"><div class="logo-badge">{LOGO_SVG}</div><div class="title">Ruang Aman</div><div class="subtitle">Kamu tidak sendirian. Kami mendengarkan.</div></div>', unsafe_allow_html=True)
 
-# Grid Fitur Utama
+# Grid Fitur Utama (Hanya Tampil Jika Belum Ada Chat)
 if not st.session_state.messages:
     fitur_container = st.container(key="fitur_grid")
     with fitur_container:
@@ -560,7 +500,7 @@ if prompt:
     if prompt.audio is not None:
         with st.spinner("Mentranskripsi suara..."):
             try:
-                user_input = transcribe_audio(prompt.audio) if prompt.audio else None
+                user_input = transcribe_audio(prompt.audio, api_key) if api_key else None
             except Exception as e:
                 st.warning(f"Gagal transkripsi audio: {e}")
     elif prompt.text:
@@ -572,7 +512,7 @@ if st.session_state.pending and not user_input:
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now()})
     
-    # 1. Analisis Emosi via Gemini AI
+    # 1. Analisis Emosi via Gemini AI (Cepat & Tanpa Model Lokal)
     support_info = analyze_emotion_and_label_via_gemini(api_key, user_input)
     st.session_state["last_emotion_result"] = support_info
 
@@ -584,7 +524,7 @@ if user_input:
                 st.markdown(f'<div class="support-banner">{banner}</div>', unsafe_allow_html=True)
 
         if not api_key:
-            ans = "⚠️ Gemini API Key belum ada. Silakan atur Variables GEMINI_API_KEY di Railway."
+            ans = "⚠️ Gemini API Key belum ada. Silakan atur Secrets GEMINI_API_KEY di Streamlit Cloud."
             st.markdown(ans)
         else:
             ans = st.write_stream(gemini_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
