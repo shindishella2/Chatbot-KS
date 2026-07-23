@@ -14,8 +14,13 @@ st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
                    page_icon="\U0001f49b", layout="wide",
                    initial_sidebar_state="expanded")
 
-@st.cache_resource
-def load_embed(): return SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+@st.cache_resource(show_spinner=False)
+def load_embed():
+    model = SentenceTransformer(
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        device="cpu"
+    )
+    return model
 @st.cache_resource
 def load_store():
     return faiss.read_index("faiss_index.index"), pickle.load(open("chunks.pkl","rb"))
