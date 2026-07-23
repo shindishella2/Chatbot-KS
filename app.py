@@ -1040,9 +1040,8 @@ def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-2.5-flash"):
     print_ram("Sesudah Gemini")
     transcription = response.text
     return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
-
+from fpdf import FPDF
 def _pdf_sanitize(text):
-    from fpdf import FPDF
     replacements = {
         "—": "-", "–": "-", "‘": "'", "’": "'",
         "“": '"', "”": '"', "…": "...",
