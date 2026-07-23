@@ -10,7 +10,8 @@ import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 # Set Page Config
@@ -451,10 +452,15 @@ with st.sidebar:
     if st.session_state.messages:
         st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
 
-    api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+    # Coba ambil dari Environment Variable Railway dulu
+    api_key = os.environ.get("GEMINI_API_KEY")
+    
+    # Kalau kosong (misal saat dijalankan di lokal), baru coba ambil dari secrets.toml
     if not api_key:
-        api_key = st.text_input("🔑 Gemini API Key", type="password")
-
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = ""
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
         if st.button(f"{emoji} {label}", key=f"menu_{key}", use_container_width=True, type="primary" if is_active else "secondary"):
