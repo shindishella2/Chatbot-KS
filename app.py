@@ -59,7 +59,7 @@ def analyze_emotion_and_support(text: str, api_key: str) -> dict:
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-1.5-flash-8b",
             contents=text,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -977,7 +977,7 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
         try:
             client = genai.Client(api_key=key)
             stream = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
+                model="gemini-1.5-flash",
                 contents=gemini_history,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
@@ -995,9 +995,11 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
         except Exception as e:
             print(f"[GEMINI key #{idx+1} GAGAL] {type(e).__name__}: {e}", flush=True)
             continue
-
-    yield "⚠️ Gemini sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
-def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-2.5-flash"):
+        except Exception as e:
+            print(f"[GEMINI ERROR] {type(e).__name__}: {e}", flush=True)
+             yield "⚠️ Chatbot sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+    
+def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-1.5-flash"):
     """Kirim audio ke Gemini, kembalikan teks hasil transkripsi (Bahasa Indonesia)."""
     audio_bytes_io.seek(0)
     audio_bytes = audio_bytes_io.read()
