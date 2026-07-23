@@ -87,6 +87,7 @@ def analyze_emotion_and_support(text: str, api_key: str) -> dict:
                 temperature=0.7,
                 max_output_tokens=150,
                 response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_budget=0),  # <- matiin thinking
             ),
         )
         raw = response.text.strip()
@@ -1006,7 +1007,8 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     temperature=0.75,
-                    max_output_tokens=900,
+                    max_output_tokens=2048,   # dari 900, dinaikin buat jaga-jaga
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),  # <- matiin thinking
                 ),
             )
             got_chunk = False
