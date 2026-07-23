@@ -4,7 +4,6 @@ import time, faiss, numpy as np, pickle, os
 from datetime import datetime
 import streamlit as st
 from streamlit.components.v1 import html as components_html
-from sentence_transformers import SentenceTransformer
 import json
 from google import genai
 from google.genai import types
@@ -22,7 +21,6 @@ st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
 @st.cache_resource
 def load_embed():
     print_ram("Sebelum load embedding")
-
     model = SentenceTransformer(
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         device="cpu"
@@ -34,7 +32,6 @@ def load_embed():
 @st.cache_resource
 @st.cache_resource
 def load_store():
-
     print_ram("Sebelum load faiss")
 
     index = faiss.read_index("faiss_index.index")
