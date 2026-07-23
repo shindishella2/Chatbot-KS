@@ -9,7 +9,8 @@ import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
-from groq import Groq
+import google.generativeai as genai
+import json
 
 # Set Page Config
 st.set_page_config(
@@ -31,16 +32,16 @@ def load_store():
 embed_model = load_embed()
 index, chunks = load_store()
 
-# ===================== DYNAMIC EMOTION VIA GROQ AI =====================
-def analyze_emotion_and_label_via_groq(api_key, user_text: str) -> dict:
-    """Menggunakan Groq AI untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
+
+def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
+    """Menggunakan Gemini untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
     if not api_key:
         return {
             "emosi": "neutral",
             "perlu_rujukan": False,
             "ai_label": "Siap membantu dan mendengarkan ceritamu."
         }
-    
+
     system_prompt = (
         "Kamu adalah sistem pengolah emosi untuk chatbot konseling kekerasan seksual.\n"
         "Tugasmu menganalisis pesan user dan menghasilkan output dalam format JSON MURNI (tanpa markdown/penjelasan tambahan):\n"
@@ -53,31 +54,30 @@ def analyze_emotion_and_label_via_groq(api_key, user_text: str) -> dict:
         "- Set 'perlu_rujukan' = true HANYA jika emosi user tergolong 'sadness', 'fear', atau distress berat.\n"
         "- Bahasa pada 'ai_label' harus santai, empati, tanpa tanda kutip, seperti teman dekat."
     )
-    
+
     try:
-        client = Groq(api_key=api_key)
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Pesan user: {user_text}"}
-            ],
-            temperature=0.3,
-            max_tokens=150,
-            response_format={"type": "json_object"}
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            "gemini-1.5-flash",
+            system_instruction=system_prompt
         )
-        import json
-        res = json.loads(completion.choices[0].message.content)
+        response = model.generate_content(
+            user_text,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        res = json.loads(response.text)
+
         return {
             "emosi": res.get("emosi", "neutral"),
             "perlu_rujukan": res.get("perlu_rujukan", False),
             "ai_label": res.get("ai_label", "Siap membantu proses konselingmu.")
         }
-    except Exception:
+    except Exception as e:
+        print(f"Error pada deteksi emosi: {e}")
         return {
             "emosi": "neutral",
             "perlu_rujukan": False,
-            "ai_label": "Aku di sini mendengarkanmu. Ceritakan saja, ya."
+            "ai_label": "Siap membantu proses konselingmu."
         }
 
 SUPPORT_MESSAGES = {
@@ -332,7 +332,7 @@ PROMPTS = {
     "lapor": BASE + "\nPERAN SEKARANG: PEMANDU PELAPORAN. Beri langkah praktis 1-2-3 ke lembaga terkait & pembuktian.",
 }
 
-def groq_answer(api_key, user_input, history, mode, support_info):
+def gemini_answer(api_key, user_input, history, mode, support_info):
     ctx_list, sim = retrieve(user_input)
     context = "\n\n".join(f"[Kutipan {i+1}] {c}" for i, c in enumerate(ctx_list)) if ctx_list else "(Tidak ada pasal relevan di atas ambang.)"
     system_prompt = PROMPTS[mode]
@@ -341,33 +341,40 @@ def groq_answer(api_key, user_input, history, mode, support_info):
         system_prompt += "\n\nCATATAN TAMBAHAN: User tampak tertekan. Jawab dengan sangat empatik dan sisipkan secara halus layanan SAPA 129."
 
     user_msg = f"PERTANYAAN PENGGUNA:\n{user_input}\n\nKONTEKS PASAL UU TPKS (relevansi {sim:.0%}):\n{context}"
-    msgs = [{"role": "system", "content": system_prompt}]
+
+    # Gemini pakai role "user"/"model", bukan "user"/"assistant"
+    gemini_history = []
     for h in history[-6:]:
-        msgs.append({"role": h["role"], "content": h["content"]})
-    msgs.append({"role": "user", "content": user_msg})
+        role = "model" if h["role"] == "assistant" else "user"
+        gemini_history.append({"role": role, "parts": [h["content"]]})
 
     try:
-        client = Groq(api_key=api_key)
-        stream = client.chat.completions.create(
-            model="llama-3.3-70b-versatile", messages=msgs, temperature=0.75, max_tokens=900, stream=True
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            "gemini-1.5-pro",
+            system_instruction=system_prompt,
+            generation_config={"temperature": 0.75, "max_output_tokens": 900}
         )
+        chat = model.start_chat(history=gemini_history)
+        stream = chat.send_message(user_msg, stream=True)
         for chunk in stream:
-            d = chunk.choices[0].delta.content
-            if d:
-                yield d
+            if chunk.text:
+                yield chunk.text
     except Exception as e:
-        yield "⚠️ Groq sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+        print(f"Error pada gemini_answer: {e}")
+        yield "⚠️ Chatbot sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
 
-def transcribe_audio(audio_bytes_io, groq_client):
+def transcribe_audio(audio_bytes_io):
+    """Kirim audio ke Gemini, kembalikan teks hasil transkripsi (Bahasa Indonesia)."""
     audio_bytes_io.seek(0)
-    transcription = groq_client.audio.transcriptions.create(
-        file=("input.wav", audio_bytes_io.read()),
-        model="whisper-large-v3-turbo",
-        language="id",
-        response_format="text",
-        temperature=0.0,
-    )
-    return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+    audio_part = {
+        "mime_type": "audio/wav", 
+        "data": audio_bytes_io.read()
+    }
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    prompt = "Tolong transkripsikan audio ini ke teks Bahasa Indonesia. Berikan teksnya saja secara persis tanpa tambahan komentar apapun."
+    response = model.generate_content([prompt, audio_part])
+    return response.text.strip()
 
 def _pdf_sanitize(text):
     replacements = {"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "..."}
@@ -439,9 +446,9 @@ with st.sidebar:
     if st.session_state.messages:
         st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
 
-    api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY", "")
+    api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        api_key = st.text_input("🔑 Groq API Key", type="password")
+        api_key = st.text_input("🔑 Gemini API Key", type="password")
 
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
@@ -457,7 +464,6 @@ with st.sidebar:
         current_label = last["ai_label"] if last else "Siap membantu proses konselingmu."
         st.markdown(f'<div style="padding:12px; border-radius:14px; background-color:rgba(255,255,255,0.35); text-align:center;"><div style="font-size:28px;">{current_emoji}</div><div style="font-size:13px; margin-top:4px; color:{T["navy"]}; font-weight:500;">{current_label}</div></div>', unsafe_allow_html=True)
 
-groq_client = Groq(api_key=api_key) if api_key else None
 mode_key = st.session_state.active_menu
 
 # Header Utama
@@ -489,7 +495,7 @@ if prompt:
     if prompt.audio is not None:
         with st.spinner("Mentranskripsi suara..."):
             try:
-                user_input = transcribe_audio(prompt.audio, groq_client) if groq_client else None
+                user_input = transcribe_audio(prompt.audio) if prompt.audio else None
             except Exception as e:
                 st.warning(f"Gagal transkripsi audio: {e}")
     elif prompt.text:
@@ -502,7 +508,7 @@ if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now()})
     
     # 1. Analisis Emosi via Groq AI (Cepat & Tanpa Model Lokal)
-    support_info = analyze_emotion_and_label_via_groq(api_key, user_input)
+    support_info = analyze_emotion_and_label_via_gemini(api_key, user_input)
     st.session_state["last_emotion_result"] = support_info
 
     # 2. Render Chat Assistant
@@ -513,10 +519,10 @@ if user_input:
                 st.markdown(f'<div class="support-banner">{banner}</div>', unsafe_allow_html=True)
 
         if not api_key:
-            ans = "⚠️ Groq API Key belum ada. Silakan atur Secrets GROQ_API_KEY di Streamlit Cloud."
+            ans = "⚠️ Gemini API Key belum ada. Silakan atur Secrets GEMINI_API_KEY di Streamlit Cloud."
             st.markdown(ans)
         else:
-            ans = st.write_stream(groq_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
+            ans = st.write_stream(gemini_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
 
     st.session_state.messages.append({"role": "assistant", "content": ans, "time": datetime.now()})
     st.rerun()
