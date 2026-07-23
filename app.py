@@ -445,10 +445,15 @@ with st.sidebar:
 
     if st.session_state.messages:
         st.download_button("💾 Simpan Percakapan (PDF)", data=build_transcript_pdf(), file_name="ruang-aman.pdf", mime="application/pdf", use_container_width=True)
-
-    api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+    # Cek dari sistem operasi (Railway) terlebih dahulu
+    api_key = os.environ.get("GEMINI_API_KEY")
+    
+    # Kalau di OS tidak ada (misal jalan di komputer lokal), coba cari di file secrets
     if not api_key:
-        api_key = st.text_input("🔑 Gemini API Key", type="password")
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = ""
 
     for key, emoji, label in MENU_ITEMS:
         is_active = st.session_state.active_menu == key
