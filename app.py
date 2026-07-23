@@ -1,108 +1,136 @@
-import os
+from fpdf import FPDF
 import random
 import re
-import json
-import pickle
+import time, faiss, numpy as np, pickle, os
 from datetime import datetime
-from fpdf import FPDF
-import faiss
-import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
+import json
 from google import genai
 from google.genai import types
 
+st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
+                   page_icon="\U0001f49b", layout="wide",
+                   initial_sidebar_state="expanded")
 
-# Set Page Config
-st.set_page_config(
-    page_title="Ruang Aman - Konseling Hukum UU TPKS",
-    page_icon="💛",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ===================== LOAD VECTOR DATABASE =====================
 @st.cache_resource
-def load_embed(): 
-    return SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-
+def load_embed(): return SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 @st.cache_resource
 def load_store():
     return faiss.read_index("faiss_index.index"), pickle.load(open("chunks.pkl","rb"))
 
-embed_model = load_embed()
-index, chunks = load_store()
+FALLBACK_SUPPORT_SENTENCE = {
+    "sadness": "Aku di sini mendengarkanmu. Ceritakan saja semuanya, ya.",
+    "fear": "Kamu aman di sini. Tarik napas dalam-dalam, kita lalui bersama.",
+    "anger": "Wajar kok kalau kamu kesal. Yuk, rehat sejenak dan tenangin pikiran.",
+    "happy": "Ikut senang mendengarnya! Cerita seru apa lagi nih?",
+    "love": "Terima kasih ya sudah berbagi energi positif. Kamu berharga!",
+}
 
-# ===================== DYNAMIC EMOTION VIA GEMINI AI =====================
-def analyze_emotion_and_label_via_gemini(api_key, user_text: str) -> dict:
-    """Menggunakan Gemini AI untuk mendeteksi emosi sekaligus membuat pesan penguat dinamis."""
+def analyze_emotion_and_support(text: str, api_key: str) -> dict:
+    """1 Gemini call yang sekaligus: (1) klasifikasi emosi 5 kelas, dan
+    (2) bikin 1 kalimat support dinamis berdasarkan emosi dominan itu sendiri.
+    Menggantikan 2 call terpisah (detect_emotion + generate_ai_support_label)."""
+    labels = ["sadness", "fear", "anger", "happy", "love"]
+    default_scores = {l: 0.0 for l in labels}
+    default_fallback = "Siap membantu dan mendengarkan ceritamu."
     if not api_key:
-        return {
-            "emosi": "neutral",
-            "perlu_rujukan": False,
-            "ai_label": "Siap membantu dan mendengarkan ceritamu."
-        }
-
+        return {"label_dominan": "sadness", "confidence": 0.0, "semua_skor": default_scores, "ai_label": default_fallback}
     system_prompt = (
-        "Kamu adalah sistem pengolah emosi untuk chatbot konseling kekerasan seksual.\n"
-        "Tugasmu menganalisis pesan user dan menghasilkan output dalam format JSON MURNI (tanpa markdown/penjelasan tambahan):\n"
-        "{\n"
-        '  "emosi": "sadness" | "fear" | "anger" | "happy" | "love" | "neutral",\n'
-        '  "perlu_rujukan": true | false,\n'
-        '  "ai_label": "1 kalimat penguat yang sangat hangat, lembut, dan natural (maks 12 kata)"\n'
-        "}\n\n"
-        "ATURAN:\n"
-        "- Set 'perlu_rujukan' = true HANYA jika emosi user tergolong 'sadness', 'fear', atau distress berat.\n"
-        "- Bahasa pada 'ai_label' harus santai, empati, tanpa tanda kutip, seperti teman dekat."
+        "Kamu adalah asisten yang menganalisis emosi teks Bahasa Indonesia SEKALIGUS "
+        "membuat 1 kalimat respons suportif singkat, dalam satu langkah.\n\n"
+        "LANGKAH 1 - KLASIFIKASI EMOSI:\n"
+        "Klasifikasikan pesan user ke 5 emosi: sadness, fear, anger, happy, love. "
+        "Beri skor keyakinan 0-1 untuk masing-masing (total sekitar 1.0).\n\n"
+        "LANGKAH 2 - KALIMAT SUPPORT (berdasarkan emosi dominan hasil Langkah 1):\n"
+        "- sadness: 1 kalimat sangat lembut, empati mendalam, tunjukkan kamu ada untuknya.\n"
+        "- fear: 1 kalimat menenangkan, berikan kepastian dia aman bercerita di sini.\n"
+        "- anger: 1 kalimat validasi yang adem, turunkan tensi tanpa menghakimi.\n"
+        "- happy: 1 kalimat ikut senang, antusias, apresiasi energi positifnya.\n"
+        "- love: 1 kalimat apresiasi hangat atas kasih sayang/cerita indahnya.\n\n"
+        "ATURAN KALIMAT SUPPORT:\n"
+        "- Maksimal 12-15 kata.\n"
+        "- Bahasa Indonesia santai/kasual, natural seperti teman dekat (jangan kaku/formal).\n"
+        "- DILARANG pakai tanda kutip atau kalimat pengantar seperti 'Ini kalimatnya:'.\n\n"
+        "Balas HANYA dengan JSON valid tanpa teks/markdown lain, format PERSIS:\n"
+        '{"sadness": 0.0, "fear": 0.0, "anger": 0.0, "happy": 0.0, "love": 0.0, "support_sentence": "..."}'
     )
-
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
             model="gemini-2.5-flash-lite",
-            contents=f"Pesan user: {user_text}",
+            contents=text,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
-                temperature=0.3,
+                temperature=0.7,
                 max_output_tokens=150,
                 response_mime_type="application/json",
             ),
         )
-        res = json.loads(response.text)
-        return {
-            "emosi": res.get("emosi", "neutral"),
-            "perlu_rujukan": res.get("perlu_rujukan", False),
-            "ai_label": res.get("ai_label", "Siap membantu proses konselingmu.")
-        }
+        raw = response.text.strip()
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+        scores = {l: float(data.get(l, 0.0)) for l in labels}
+        dominant = max(scores, key=scores.get)
+        support_sentence = str(data.get("support_sentence", "")).strip()
+        if not support_sentence:
+            support_sentence = FALLBACK_SUPPORT_SENTENCE.get(dominant, default_fallback)
+        return {"label_dominan": dominant, "confidence": scores[dominant], "semua_skor": scores, "ai_label": support_sentence}
     except Exception:
-        return {
-            "emosi": "neutral",
-            "perlu_rujukan": False,
-            "ai_label": "Aku di sini mendengarkanmu. Ceritakan saja, ya."
-        }
+        return {"label_dominan": "sadness", "confidence": 0.0, "semua_skor": default_scores,
+                 "ai_label": FALLBACK_SUPPORT_SENTENCE["sadness"]}
+
+
+DISTRESS_MAP = {
+    "sadness": "tinggi",
+    "fear": "tinggi",
+    "anger": "sedang",
+    "happy": "rendah",
+    "love": "rendah",
+}
+
+def get_support_flag(text: str, api_key: str, threshold: float = 0.5, sadness_safety_threshold: float = 0.30) -> dict:
+    r = analyze_emotion_and_support(text, api_key)
+    dominant = r["label_dominan"]
+    level = DISTRESS_MAP.get(dominant, "rendah")
+    if r["confidence"] < threshold:
+        level = "rendah"
+    sadness_score = r["semua_skor"].get("sadness", 0)
+    if sadness_score >= sadness_safety_threshold:
+        level = "tinggi"
+    return {
+        "emosi": dominant,
+        "confidence": r["confidence"],
+        "sadness_score": sadness_score,
+        "distress_level": level,
+        "perlu_rujukan": level == "tinggi",
+        "ai_label": r["ai_label"],
+    }
+
+
+TYPING_INDICATOR_HTML = """
+<div class="typing-indicator"><span></span><span></span><span></span></div>
+"""
+
 
 SUPPORT_MESSAGES = {
     "sadness": [
-        "🤍 Apa pun yang kamu rasakan sekarang itu valid. Kamu gak sendirian di sini.",
-        "🤍 Terima kasih udah mau cerita. Pelan-pelan aja, gak perlu buru-buru.",
-        "🤍 Kamu udah berani sejauh ini dengan cerita di sini. Itu bukan hal kecil.",
+        "\U0001f90d Apa pun yang kamu rasakan sekarang itu valid. Kamu gak sendirian di sini.",
+        "\U0001f90d Terima kasih udah mau cerita. Pelan-pelan aja, gak perlu buru-buru.",
+        "\U0001f90d Kamu udah berani sejauh ini dengan cerita di sini. Itu bukan hal kecil.",
     ],
     "fear": [
-        "🫂 Kamu aman untuk cerita di sini, dengan kecepatanmu sendiri.",
-        "🫂 Gak apa-apa kalau masih takut. Kamu boleh berhenti kapan pun kamu perlu.",
-        "🫂 Perasaan itu wajar. Kita jalan pelan-pelan aja, sesuai kesiapanmu.",
+        "\U0001fac2 Kamu aman untuk cerita di sini, dengan kecepatanmu sendiri.",
+        "\U0001fac2 Gak apa-apa kalau masih takut. Kamu boleh berhenti kapan pun kamu perlu.",
+        "\U0001fac2 Perasaan itu wajar. Kita jalan pelan-pelan aja, sesuai kesiapanmu.",
     ],
-    "anger": [
-        "🍃 Luapkan saja rasa kesalmu. Perasaanmu sangat berhak untuk didengar.",
-    ]
 }
 
 def get_support_banner(emotion_label: str):
     pool = SUPPORT_MESSAGES.get(emotion_label)
     return random.choice(pool) if pool else None
-
-# ===================== TEMA CSS =====================
+# ===================== TEMA — sesuai referensi gambar =====================
 T = dict(
     navy="#0E1B48", mauve="#C18DB4", blush="#E2CAD8", skyblue="#87A7D0",
     slate="#27425D", deep="#0E1F2F",
@@ -113,12 +141,14 @@ T = dict(
     appbg="linear-gradient(135deg, rgba(14,27,72,0.30) 0%, rgba(193,141,180,0.30) 25%, rgba(226,202,216,0.30) 50%, rgba(135,167,208,0.30) 75%, rgba(39,66,93,0.30) 100%), #0E1F2F",
 )
 
+# Logo pakai SVG (bentuk hands+heart sesuai referensi).
 LOGO_SVG = """<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 8.6c-1-1.7-2.7-2.6-4.4-2.1C5.6 7 4.6 8.9 5.2 10.7c.6 2 3 4.1 6.8 6.9 3.8-2.8 6.2-4.9 6.8-6.9.6-1.8-.4-3.7-2.4-4.2-1.7-.5-3.4.4-4.4 2.1Z"
           stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
     <path d="M3.5 15c-.6 1.6-.2 3 1 3.9M20.5 15c.6 1.6.2 3-1 3.9"
           stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
 </svg>"""
+
 
 def inject_css(t):
     st.markdown(f"""
@@ -812,8 +842,12 @@ MENU_ITEMS = [
     ("lapor", "\U0001f4cb", "Panduan Lapor"),
 ]
 MENU_LABELS = {"konseling": "Konseling", "pasal": "Telusur Pasal", "lapor": "Panduan Lapor"}
+
 THRESHOLD = 0.5
 def retrieve(query, k=4, th=THRESHOLD):
+    embed_model = load_embed()
+    index, chunks = load_store()
+
     m = re.search(r"pasal\s+(\d{1,3})\b", query, re.IGNORECASE)
     exact_ctx = []
     if m:
@@ -829,70 +863,155 @@ def retrieve(query, k=4, th=THRESHOLD):
     sim = 1.0 if exact_ctx else float(D[0][0])
     return ctx, sim
 
-BASE = """Kamu adalah "Pasal", asisten hukum berbahasa Indonesia yang HANYA membahas UU No. 12 Tahun 2022 tentang Tindak Pidana Kekerasan Seksual (UU TPKS).
+BASE = """Kamu adalah "Pasal", asisten hukum berbahasa Indonesia yang HANYA membahas
+UU No. 12 Tahun 2022 tentang Tindak Pidana Kekerasan Seksual (UU TPKS).
 
 PRINSIP WAJIB:
-- SEBELUM menjawab, cek dulu: apakah pertanyaan user ADA HUBUNGANNYA dengan kekerasan seksual, TPKS, atau isi UU ini? Kalau SAMA SEKALI TIDAK NYAMBUNG, JANGAN dipaksa dikaitkan. Jawab singkat bahwa kamu cuma fokus bahas UU TPKS.
-- Jawab HANYA dari materi pasal yang tersedia. Dilarang mengarang pasal.
-- Sapaan WAJIB konsisten "kamu". JANGAN PERNAH pakai "Anda".
-- HINDARI kata "saya"/"aku" saat chatbot merujuk ke dirinya sendiri.
-- DILARANG memulai kalimat pertama jawaban dengan kata "Kamu"/"Anda", dan DILARANG parafrase kaku atas cerita user.
-- WAJIB menyelipkan emoji/emoticon yang relevan dan hangat di setiap respons (misalnya: 🫂, 💛, 🛡️, ✨).
+- SEBELUM menjawab, cek dulu: apakah pertanyaan user ADA HUBUNGANNYA dengan kekerasan
+  seksual, TPKS, atau isi UU ini? Kalau SAMA SEKALI TIDAK NYAMBUNG (tips skripsi, resep
+  masakan, coding, dll), JANGAN dipaksa dikait-kaitkan ke pasal apapun. Jawab singkat
+  bahwa kamu cuma fokus bahas UU TPKS.
+- Jawab HANYA dari materi pasal yang tersedia. Dilarang mengarang pasal/angka. Kalau
+  jawabannya nggak ada, bilang terus terang lalu arahkan ke bantuan resmi.
+- Sebut nomor pasal HANYA kalau ISINYA SPESIFIK ke situasi (jenis kekerasan tertentu,
+  hak korban tertentu, sanksi tertentu). Pasal definisi umum/pembukaan BUKAN dasar kuat —
+  jangan dipaksa disebut. Kalau nggak ada yang pas, jangan sebut pasal sama sekali.
+- DILARANG MUTLAK menyebut kata "konteks", "kutipan", atau "yang diberikan/disediakan/
+  tersedia" dalam bentuk apapun. User nggak tahu ada proses retrieval di baliknya. Kalau
+  pasal nggak ada yang pas, LEWATI SAJA tanpa billing "tidak ada info" — fokus ke dukungan/
+  panduannya aja.
+- Sapaan WAJIB konsisten "kamu" dari awal sampai akhir. JANGAN PERNAH pakai "Anda".
+- HINDARI kata "saya"/"aku" sama sekali saat chatbot merujuk ke dirinya sendiri. Tulis
+  ulang kalimatnya biar nggak butuh kata ganti orang pertama.
+- DILARANG memulai kalimat pertama jawaban dengan kata "Kamu"/"Anda", dan DILARANG kalimat
+  pertama berupa rangkuman/label ulang atas cerita user dalam bentuk apapun (co: "Percakapan
+  yang kamu alami itu terdengar tidak nyaman..."). Langsung ke insight/reaksi/info baru.
+  Di paragraf manapun, maksimal 1 kalimat yang diawali "Kamu" — kalimat lain pakai struktur
+  beda (kata kerja, situasi, atau klausa "Kalau...", "Karena...").
+- DILARANG mengulang parafrase situasi user yang SUDAH disebut di giliran sebelumnya.
+  Anggap itu udah established, lanjut ke hal baru.
+- MAKSIMAL 1 tanda tanya per jawaban. Kalau nggak ada yang perlu ditanya, tutup dengan
+  pernyataan/langkah konkret tanpa tanda tanya.
+- Tulis dengan bahasa manusia yang mengalir, natural, dan BERVARIASI tiap respons (struktur/
+  opening/closing, bukan cuma variasi kata). DILARANG KERAS kalimat pembuka klise: "Maaf
+  mendengar...", "Terima kasih sudah berbagi...".
+- Jangan menjejalkan kontak SAPA 129 di setiap jawaban; sebut hanya bila relevan.
+- Kalimat pertama jawaban HARUS langsung berisi salah satu dari: (a) informasi/insight baru
+  yang belum disebut user, (b) pertanyaan balik jika benar-benar perlu, atau (c) langkah/opsi
+  konkret. DILARANG kalimat pertama berupa PARAFRASE situasi user dalam bentuk apapun, termasuk
+  yang berbunyi "Kalau [situasi]...", "Posisi/Keadaan/Situasi [X] itu...", "Kamu sudah/sedang...".
+  Contoh BENAR: "Menolak permintaan itu adalah hakmu, dan penolakan itu sendiri sudah cukup —
+  nggak perlu alasan tambahan." Contoh SALAH: "Kalau pacarmu meminta hal itu, itu bisa membuatmu
+  tidak nyaman." (ini parafrase, dilarang)
+- WAJIB menyelipkan emoji/emoticon yang relevan, hangat, dan menenangkan di setiap respons (misalnya: 🫂, 💛, 🛡️, ✨) di dalam bubble chat agar terasa suportif dan ramah.
 """
-
 PROMPTS = {
-    "konseling": BASE + "\nPERAN SEKARANG: KONSELOR empatik. Validasi perasaan user, selipkan pasal jika sangat relevan. Maksimal 4 paragraf pendek.",
-    "pasal": BASE + "\nPERAN SEKARANG: PENELUSUR PASAL. Jawab lugas, sebutkan pasal + sanksi pidana secara rinci.",
-    "lapor": BASE + "\nPERAN SEKARANG: PEMANDU PELAPORAN. Beri langkah praktis 1-2-3 ke lembaga terkait & pembuktian.",
+"konseling": BASE + '''
+
+PERAN SEKARANG: KONSELOR (bukan customer service, bukan legal-bot).
+Baca cerita orangnya dulu, reaksi dengan cara yang nunjukin kamu beneran nangkep detailnya
+(sebut ulang elemen spesifik dari ceritanya dengan kata-katamu sendiri, bukan parafrase kaku).
+Validasi perasaannya tanpa menggurui. Kalau ada pasal yang BENAR-BENAR pas dengan situasinya,
+selipkan natural di tengah kalimat (bukan sebagai poin terpisah/dokumentatif). Kalau nggak ada
+pasal yang pas, itu OK — nggak usah dipaksa nyebut pasal sama sekali di respons ini.
+Tutup dengan sesuatu yang konkret: satu langkah kecil yang relevan buat situasi dia, ATAU
+ajakan buat cerita lebih lanjut yang terasa personal (bukan template).
+Nada: seperti teman yang paham hukum, bukan seperti membacakan pasal. Maksimal 4 paragraf pendek,
+variasikan panjang & struktur kalimat supaya nggak kerasa template.
+
+JAGA KESELAMATAN EMOSIONAL — INI PRIORITAS DI ATAS INFORMASI HUKUM:
+- Jangan pernah membuat user merasa lebih bersalah, lebih takut, atau lebih terpojok dari
+  sebelum dia curhat. Kalau ragu antara jawaban yang "lengkap secara hukum" vs "aman secara
+  emosional", pilih yang aman secara emosional.
+- Jangan memaksa/mendesak user buat lapor, konfrontasi pelaku, atau ambil tindakan tertentu.
+  Tawarkan opsi, bukan instruksi. Hormati kalau dia belum siap atau belum mau bertindak.
+- Kalau user menunjukkan tanda distress berat (putus asa, menyalahkan diri berlebihan,
+  menyebut ingin menyakiti diri), JANGAN lanjut bahas pasal/hukum dulu — fokus ke stabilisasi
+  emosinya dan arahkan ke bantuan profesional/hotline dengan tenang, bukan dengan nada
+  panik atau menghakimi.
+- Jangan membombardir dengan banyak istilah hukum sekaligus kalau user kelihatan rapuh —
+  cukup satu poin paling penting per respons, sisanya bisa nunggu giliran berikutnya.''',
+
+"pasal": BASE + '''
+
+PERAN SEKARANG: PENELUSUR PASAL.
+Jawab lugas dan informatif seperti referensi hukum. Sebutkan pasal + isi pokoknya +
+ancaman pidana (penjara/denda) bila ada. Boleh pakai poin bernomor agar rapi.
+Minim basa-basi empati; langsung ke substansi hukum. Sebut nomor pasal dengan tepat.''',
+
+"lapor": BASE + '''
+
+PERAN SEKARANG: PEMANDU PELAPORAN.
+Beri panduan PRAKTIS dan berurutan: ke mana melapor (UPTD PPA, Unit PPA Polisi),
+bukti/dokumen yang perlu disiapkan, hak korban selama proses, dan apa yang terjadi
+setelah lapor. Susun sebagai langkah 1-2-3 yang mudah diikuti. Rujuk pasal terkait
+(mis. pelaporan, alat bukti, perlindungan). Akhiri dengan kontak resmi bila relevan.''',
 }
+
 
 def gemini_answer(api_key, user_input, history, mode, support_info):
     ctx_list, sim = retrieve(user_input)
-    context = "\n\n".join(f"[Kutipan {i+1}] {c}" for i, c in enumerate(ctx_list)) if ctx_list else "(Tidak ada pasal relevan di atas ambang.)"
+    context = "\n\n".join(f"[Kutipan {i+1}] {c}" for i, c in enumerate(ctx_list)) if ctx_list \
+              else "(Tidak ada pasal relevan di atas ambang. Sampaikan jujur & arahkan ke bantuan resmi.)"
     system_prompt = PROMPTS[mode]
 
-    if support_info.get("perlu_rujukan"):
-        system_prompt += "\n\nCATATAN TAMBAHAN: User tampak tertekan. Jawab dengan sangat empatik dan sisipkan secara halus layanan SAPA 129."
+    if support_info["perlu_rujukan"]:
+        system_prompt += (
+            "\n\nCATATAN TAMBAHAN: User tampak sedang dalam kondisi tertekan/sedih. "
+            "Jawab dengan nada empatik dan hati-hati, dan sisipkan secara halus "
+            "bahwa ada layanan pendampingan seperti SAPA 129 yang bisa dihubungi "
+            "kalau butuh bantuan lebih lanjut. Jangan terkesan menghakimi atau memberi diagnosis."
+        )
 
     user_msg = f"PERTANYAAN PENGGUNA:\n{user_input}\n\nKONTEKS PASAL UU TPKS (relevansi {sim:.0%}):\n{context}"
 
-    # Gemini pakai role "user"/"model" (bukan "assistant"), dan system prompt terpisah dari contents
+    # Gemini pakai role "user"/"model" (bukan "assistant"), system prompt terpisah dari contents
     gemini_history = []
-    for h in history[-6:]:
+    for h in history[-2:]:
         role = "model" if h["role"] == "assistant" else "user"
         gemini_history.append(types.Content(role=role, parts=[types.Part.from_text(text=h["content"])]))
     gemini_history.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg)]))
 
-    try:
-        client = genai.Client(api_key=api_key)
-        stream = client.models.generate_content_stream(
-            model="gemini-2.5-flash",
-            contents=gemini_history,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.75,
-                max_output_tokens=900,
-            ),
-        )
-        for chunk in stream:
-            if chunk.text:
-                yield chunk.text
-    except Exception as e:
-        yield "⚠️ Gemini sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+    gemini_keys = [k for k in [api_key, os.environ.get("GEMINI_API_KEY_2", "")] if k]
+    for idx, key in enumerate(gemini_keys):
+        try:
+            client = genai.Client(api_key=key)
+            stream = client.models.generate_content_stream(
+                model="gemini-2.5-flash",
+                contents=gemini_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.75,
+                    max_output_tokens=900,
+                ),
+            )
+            got_chunk = False
+            for chunk in stream:
+                if chunk.text:
+                    got_chunk = True
+                    yield chunk.text
+            if got_chunk:
+                return
+        except Exception as e:
+            print(f"[GEMINI key #{idx+1} GAGAL] {type(e).__name__}: {e}", flush=True)
+            continue
 
-def transcribe_audio(audio_bytes_io, api_key):
+    yield "⚠️ Gemini sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-2.5-flash"):
+    """Kirim audio ke Gemini, kembalikan teks hasil transkripsi (Bahasa Indonesia)."""
     audio_bytes_io.seek(0)
     audio_bytes = audio_bytes_io.read()
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=model_name,
         contents=[
             types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"),
             "Transkripsikan audio ini ke teks Bahasa Indonesia. Balas HANYA dengan teks "
             "transkripsinya saja, tanpa embel-embel atau penjelasan tambahan.",
         ],
     )
-    return response.text.strip()
+    transcription = response.text
+    return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
 
 def _pdf_sanitize(text):
     replacements = {
@@ -1094,15 +1213,11 @@ with st.sidebar:
 
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    api_key = os.environ.get("GEMINI_API_KEY")
-        
-        # Kalau kosong (misal saat dijalankan di lokal), baru coba ambil dari secrets.toml
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        try:
-            api_key = st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            api_key = ""
-    
+        api_key = st.text_input("\U0001f511 Gemini API Key", type="password")
+
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     for key, emoji, label in MENU_ITEMS:
@@ -1219,16 +1334,22 @@ with chip_container:
 # accept_audio=True bikin tombol mic jadi bagian dari chat_input itu sendiri, jadi otomatis
 # ke-pin di posisi yang sama (chat_input SELALU dirender Streamlit di container fixed bawah,
 # sedangkan audio_input terpisah dulu nggak ikut ke-pin -> itu penyebab mic "geser" posisinya).
-prompt = st.chat_input("Tuliskan pesanmu di sini...", accept_audio=True, audio_sample_rate=16000)
+prompt = st.chat_input(
+    "Tuliskan pesanmu di sini...",
+    accept_audio=True,
+    audio_sample_rate=16000,
+)
 user_input = None
-
 if prompt:
     if prompt.audio is not None:
         with st.spinner("Mentranskripsi suara..."):
             try:
-                user_input = transcribe_audio(prompt.audio, api_key) if api_key else None
+                if not api_key:
+                    st.warning("🔑 GEMINI_API_KEY belum diatur — transkripsi audio tidak tersedia.")
+                else:
+                    user_input = transcribe_audio(prompt.audio, api_key)
             except Exception as e:
-                st.warning(f"Gagal transkripsi audio: {e}")
+                st.warning(f"Gagal mentranskripsi audio: {e}")
     elif prompt.text:
         user_input = prompt.text
 
@@ -1237,23 +1358,39 @@ if st.session_state.pending and not user_input:
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now()})
-    
-    # 1. Analisis Emosi via Gemini AI (Cepat & Tanpa Model Lokal)
-    support_info = analyze_emotion_and_label_via_gemini(api_key, user_input)
-    st.session_state["last_emotion_result"] = support_info
+    with st.chat_message("user", avatar="👤"):
+        st.markdown(user_input)
 
-    # 2. Render Chat Assistant
-    with st.chat_message("assistant", avatar="💛"):
-        if support_info.get("perlu_rujukan"):
-            banner = get_support_banner(support_info["emosi"])
-            if banner:
-                st.markdown(f'<div class="support-banner">{banner}</div>', unsafe_allow_html=True)
+    with st.chat_message("assistant", avatar="\U0001f49b"):
+        typing_ph = st.empty()
+        typing_ph.markdown(TYPING_INDICATOR_HTML, unsafe_allow_html=True)
+
+        # 1. Deteksi emosi + kalimat support dinamis sekaligus (1 Gemini call)
+        support_info = get_support_flag(user_input, api_key)
+
+        # 2. Simpan hasilnya ke session state
+        st.session_state["last_emotion_result"] = {
+            "label_dominan": support_info["emosi"],
+            "confidence": support_info["confidence"],
+            "ai_label": support_info["ai_label"]
+        }
+
+        typing_ph.empty()
+
+        banner_text = None
+        if support_info["perlu_rujukan"]:
+            banner_text = get_support_banner(support_info["emosi"])
+        if banner_text:
+            st.markdown(f'<div class="support-banner">{banner_text}</div>', unsafe_allow_html=True)
 
         if not api_key:
-            ans = "⚠️ Gemini API Key belum ada. Silakan atur Secrets GEMINI_API_KEY di Streamlit Cloud."
+            ans = "⚠️ Gemini API Key belum ada. Set Variable **GEMINI_API_KEY** di dashboard Railway.\n\nDarurat? **SAPA 129**."
             st.markdown(ans)
         else:
-            ans = st.write_stream(gemini_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
-
+            try:
+                ans = st.write_stream(gemini_answer(api_key, user_input, st.session_state.messages[:-1], mode_key, support_info))
+            except Exception as e:
+                ans = f"Maaf, ada kendala memanggil LLM: `{e}`\n\nKalau mendesak, hubungi **SAPA 129**."
+                st.markdown(ans)
     st.session_state.messages.append({"role": "assistant", "content": ans, "time": datetime.now()})
     st.rerun()
