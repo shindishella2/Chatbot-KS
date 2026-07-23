@@ -4,6 +4,7 @@ import time, faiss, numpy as np, pickle, os
 from datetime import datetime
 import streamlit as st
 from streamlit.components.v1 import html as components_html
+from sentence_transformers import SentenceTransformer
 import json
 from google import genai
 from google.genai import types
