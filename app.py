@@ -26,7 +26,6 @@ def load_embed():
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         device="cpu"
     )
-
     print_ram("Sesudah load embedding")
 
     return model
