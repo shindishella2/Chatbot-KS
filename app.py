@@ -17,7 +17,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ===================== LOAD VECTOR DATABASE =====================
 @st.cache_resource
 def load_embed(): 
     return SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -97,7 +96,6 @@ def get_support_banner(emotion_label: str):
     pool = SUPPORT_MESSAGES.get(emotion_label)
     return random.choice(pool) if pool else None
 
-# ===================== TEMA CSS =====================
 T = dict(
     navy="#0E1B48", mauve="#C18DB4", blush="#E2CAD8", skyblue="#87A7D0",
     slate="#27425D", deep="#0E1F2F",
@@ -959,7 +957,15 @@ def transcribe_audio(audio_bytes_io):
 
 def _pdf_sanitize(text):
     replacements = {"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "..."}
-    for k, v in replacements.items(): text = text.replace(k, v)
+    for k, v in replacements.items(): 
+        text = text.replace(k, v)
+        
+    # 1. Ganti karakter Tab dengan spasi, karena Tab sering merusak lebar kolom FPDF
+    text = text.replace('\t', ' ')
+    
+    # 2. Paksa penambahan spasi jika ada karakter menyambung lebih dari 60 huruf (misal: URL / garis putus-putus)
+    text = re.sub(r'(\S{60})', r'\1 ', text)
+    
     return text.encode("latin-1", errors="ignore").decode("latin-1")
 
 def build_transcript_pdf():
