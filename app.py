@@ -997,7 +997,8 @@ def gemini_answer(api_key, user_input, history, mode, support_info):
             continue
         except Exception as e:
             print(f"[GEMINI ERROR] {type(e).__name__}: {e}", flush=True)
-             yield "⚠️ Chatbot sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
+        
+yield "⚠️ Chatbot sedang limit. Coba lagi beberapa saat lagi.\n\nKalau mendesak, hubungi **SAPA 129**."
     
 def transcribe_audio(audio_bytes_io, api_key, model_name="gemini-1.5-flash"):
     """Kirim audio ke Gemini, kembalikan teks hasil transkripsi (Bahasa Indonesia)."""
