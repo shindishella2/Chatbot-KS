@@ -866,8 +866,9 @@ MENU_ITEMS = [
 MENU_LABELS = {"konseling": "Konseling", "pasal": "Telusur Pasal", "lapor": "Panduan Lapor"}
 
 THRESHOLD = 0.5
-print_ram("Sebelum encode")
+
 def retrieve(query, k=4, th=THRESHOLD):
+    print_ram("Sebelum encode")
     embed_model = load_embed()
     index, chunks = load_store()
     print_ram("Sesudah encode")
