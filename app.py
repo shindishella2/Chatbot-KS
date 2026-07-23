@@ -1,16 +1,13 @@
-import os
+from fpdf import FPDF
 import random
 import re
-import pickle
+import time, faiss, numpy as np, pickle, os
 from datetime import datetime
-from fpdf import FPDF
-import faiss
-import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
-import google.generativeai as genai
 import json
+import google.generativeai as genai
 
 # Set Page Config
 st.set_page_config(
