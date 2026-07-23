@@ -10,6 +10,7 @@ import numpy as np
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
 from google import genai
 from google.genai import types
 
