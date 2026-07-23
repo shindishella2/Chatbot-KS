@@ -869,7 +869,7 @@ print_ram("Sebelum encode")
 def retrieve(query, k=4, th=THRESHOLD):
     embed_model = load_embed()
     index, chunks = load_store()
-print_ram("Sesudah encode")
+    print_ram("Sesudah encode")
 
     m = re.search(r"pasal\s+(\d{1,3})\b", query, re.IGNORECASE)
     exact_ctx = []
