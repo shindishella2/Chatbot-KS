@@ -1253,7 +1253,7 @@ with st.sidebar:
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
     tampilkan_emosi = st.checkbox(
-        "\U0001f4ad Tampilkan mode percakapan",
+        "\U0001f4ad Deteksi Emosi & Dukungan",
         value=False,
         help="Menampilkan bagaimana Ruang Aman menyesuaikan gaya responsnya berdasarkan konteks percakapan."
     )
@@ -1276,7 +1276,7 @@ with st.sidebar:
     with st.expander("⚙️  Pengaturan"):
         st.markdown("""
             <div class="settings-info-card">
-                <div class="settings-info-title">🚨 Keluar Cepat</div>
+                <div class="settings-info-title">🚨 Keluar</div>
                 <div class="settings-info-desc">
                     Tombol merah di pojok kiri atas akan langsung menghapus seluruh riwayat obrolan secara permanen dan mengalihkan browser ke Google demi menjaga privasimu.
                 </div>
