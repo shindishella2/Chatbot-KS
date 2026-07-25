@@ -1172,7 +1172,7 @@ panic_exit_html = """
 </style>
 </head>
 <body>
-    <button onclick="emergencyExit()" class="panic-btn">🚨 Keluar Cepat</button>
+    <button onclick="emergencyExit()" class="panic-btn">🚨 Keluar</button>
 
     <script>
     function emergencyExit() {
