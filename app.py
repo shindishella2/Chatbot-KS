@@ -19,7 +19,7 @@ st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
                    initial_sidebar_state="expanded")
 embed_model = load_embed()
 index, chunks = load_store()
-@st.cache_resource
+@st.cache_resource(show_spinner="Memuat model bahasa...")
 def load_embed():
     print_ram("Sebelum load embedding")
     model = SentenceTransformer(
