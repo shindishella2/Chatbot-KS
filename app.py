@@ -17,8 +17,7 @@ def print_ram(stage):
 st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
                    page_icon="\U0001f49b", layout="wide",
                    initial_sidebar_state="expanded")
-embed_model = load_embed()
-index, chunks = load_store()
+
 @st.cache_resource(show_spinner="Memuat model bahasa...")
 def load_embed():
     print_ram("Sebelum load embedding")
@@ -39,7 +38,8 @@ def load_store():
     print_ram("Sesudah load faiss")
 
     return index,chunks
-
+embed_model = load_embed()
+index, chunks = load_store()
 FALLBACK_SUPPORT_SENTENCE = {
     "sadness": "Aku di sini mendengarkanmu. Ceritakan saja semuanya, ya.",
     "fear": "Kamu aman di sini. Tarik napas dalam-dalam, kita lalui bersama.",
