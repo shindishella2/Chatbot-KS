@@ -1253,7 +1253,7 @@ with st.sidebar:
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
     tampilkan_emosi = st.checkbox(
-        "\U0001f4ad Deteksi Emosi & Dukungan",
+        "\U0001f4ad Label Emosi & Dukungan",
         value=False,
         help="Menampilkan bagaimana Ruang Aman menyesuaikan gaya responsnya berdasarkan konteks percakapan."
     )
