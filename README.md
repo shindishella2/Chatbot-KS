@@ -345,9 +345,9 @@ Dengan demikian chatbot tidak hanya menjawab pertanyaan tetapi juga lebih empati
 
 ---
 
-# 4. Groq Large Language Model
+# 4. Gemini Large Language Model
 
-Setelah retrieval selesai, seluruh konteks yang relevan dikirim ke Large Language Model melalui Groq API.
+Setelah retrieval selesai, seluruh konteks yang relevan dikirim ke Large Language Model melalui Gemini API.
 
 LLM bertugas untuk:
 
@@ -417,7 +417,7 @@ Prompt Engineering
 
 ↓
 
-Groq LLM
+Gemini LLM
 
 ↓
 
@@ -439,7 +439,7 @@ Final Answer
 | Vector Database | FAISS |
 | Deep Learning | PyTorch |
 | Emotion Model | Transformers |
-| LLM | Groq API |
+| LLM | Gemini API |
 | Deployment | Railway |
 
 ---
