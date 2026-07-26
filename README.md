@@ -7,7 +7,6 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-Web_App-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
 ![FAISS](https://img.shields.io/badge/FAISS-Vector_Search-00599C?style=for-the-badge)
 ![Sentence Transformers](https://img.shields.io/badge/Sentence-Transformers-yellow?style=for-the-badge)
-![Gemini]([https://img.shields.io/badge/Groq-LLM_API-black?style=for-the-badge](https://aistudio.google.com/welcome?utm_source=google&utm_medium=cpc&utm_campaign=Cloud-SS-DR-AIS-FY26-global-gsem-1713578&utm_content=text-ad&utm_term=KW_gemini%20api&gad_source=1&gad_campaignid=23417416052&gbraid=0AAAAACn9t67aKhFyd9pXoKi05JH4sKN8l&gclid=Cj0KCQjw4JbTBhCoARIsALWUaBvU9WLraJATNe1qvKBRwiDFs11LOUbRG6avxxaM7SJKDMygnbWq-j0aAtUUEALw_wcB))
 ![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=for-the-badge&logo=railway)
 
 </p>
