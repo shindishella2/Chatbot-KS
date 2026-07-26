@@ -17,7 +17,8 @@ def print_ram(stage):
 st.set_page_config(page_title="Ruang Aman - Konseling Hukum UU TPKS",
                    page_icon="\U0001f49b", layout="wide",
                    initial_sidebar_state="expanded")
-
+embed_model = load_embed()
+index, chunks = load_store()
 @st.cache_resource
 def load_embed():
     print_ram("Sebelum load embedding")
@@ -867,8 +868,6 @@ THRESHOLD = 0.5
 
 def retrieve(query, k=4, th=THRESHOLD):
     print_ram("Sebelum encode")
-    embed_model = load_embed()
-    index, chunks = load_store()
     print_ram("Sesudah encode")
 
     m = re.search(r"pasal\s+(\d{1,3})\b", query, re.IGNORECASE)
