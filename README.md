@@ -19,7 +19,7 @@ Chatbot Hukum TPKS merupakan chatbot berbasis Artificial Intelligence yang diran
 
 Berbeda dengan chatbot berbasis Large Language Model (LLM) yang hanya mengandalkan pengetahuan bawaan model, sistem ini mengimplementasikan pendekatan **Retrieval-Augmented Generation (RAG)** sehingga setiap jawaban didasarkan pada isi dokumen hukum yang telah diproses sebelumnya.
 
-Selain itu, chatbot juga memiliki modul **Emotion Classification** sehingga jawaban dapat disampaikan dengan gaya bahasa yang lebih empatik sesuai kondisi emosional pengguna.
+Selain itu, chatbot juga memiliki kemampuan **Emotion Classification** berbasis LLM sehingga jawaban dapat disampaikan dengan gaya bahasa yang lebih empatik sesuai kondisi emosional pengguna.
 
 ---
 
@@ -31,7 +31,7 @@ Project ini bertujuan untuk:
 - Mengurangi kesalahan interpretasi terhadap pasal-pasal hukum.
 - Menyediakan chatbot hukum yang lebih akurat melalui Retrieval-Augmented Generation (RAG).
 - Mengurangi hallucination pada Large Language Model.
-- Menghasilkan jawaban yang lebih empatik melalui emotion detection.
+- Menghasilkan jawaban yang lebih empatik melalui emotion classification.
 - Menjadi contoh implementasi AI pada domain legal.
 
 ---
@@ -41,8 +41,8 @@ Project ini bertujuan untuk:
 - 📚 Retrieval-Augmented Generation (RAG)
 - 🔍 Semantic Search menggunakan FAISS
 - 🧠 Sentence Transformer Embedding
-- ❤️ Emotion Classification
-- 🤖 Large Language Model melalui Groq API
+- ❤️ Emotion Classification berbasis LLM
+- 🤖 Large Language Model melalui Gemini API
 - 📄 OCR PDF menggunakan PaddleOCR
 - 💬 Streamlit Web Application
 - 🚀 Railway Deployment Ready
@@ -99,7 +99,7 @@ Contoh:
                     User Question
                            │
                            ▼
-                Emotion Classification
+                  Emotion Classification
                            │
                            ▼
                Semantic Search (FAISS)
@@ -111,7 +111,7 @@ Contoh:
                  Prompt Engineering
                            │
                            ▼
-                     Groq LLM API
+                     Gemini LLM API
                            │
                            ▼
                     Final Response
@@ -156,8 +156,9 @@ Merupakan aplikasi utama berbasis **Streamlit**.
 File ini bertanggung jawab untuk:
 
 - menerima pertanyaan pengguna
+- mendeteksi emosi pengguna melalui Gemini API
 - melakukan semantic search
-- mengirim prompt ke Groq
+- mengirim prompt ke Gemini
 - menampilkan jawaban
 
 Notebook **tidak dijalankan** ketika aplikasi berjalan.
@@ -357,11 +358,11 @@ LLM bertugas untuk:
 - menyusun jawaban natural
 - menghindari hallucination
 
-Keuntungan menggunakan Groq:
+Keuntungan menggunakan Gemini:
 
-- inference sangat cepat
-- latency rendah
-- kompatibel dengan model open-source modern
+- inference cepat
+- kompatibel dengan kebutuhan streaming jawaban
+- mendukung deteksi emosi dan transkripsi suara dalam satu ekosistem API
 - mudah diintegrasikan melalui API
 
 ---
@@ -397,7 +398,7 @@ Question
 
 ↓
 
-Emotion Detection
+Emotion Classification
 
 ↓
 
@@ -438,7 +439,7 @@ Final Answer
 | Embedding | Sentence Transformers |
 | Vector Database | FAISS |
 | Deep Learning | PyTorch |
-| Emotion Model | Transformers |
+| Emotion Classification | Gemini API |
 | LLM | Gemini API |
 | Deployment | Railway |
 
@@ -556,7 +557,7 @@ pip install -r requirements-dev.txt
 | Pillow | Image Utilities |
 | scikit-learn | Machine Learning |
 | streamlit | Web Application |
-| groq | Groq API Client |
+| google-generativeai | Gemini API Client |
 | python-dotenv | Environment Variable |
 | matplotlib | Visualisasi |
 | seaborn | Visualisasi |
@@ -804,7 +805,7 @@ Evaluation
 emotion_model_final/
 ```
 
-Model hasil training disimpan sehingga tidak perlu dilatih ulang setiap kali aplikasi dijalankan.
+Model hasil training ini disimpan ke folder emotion_model_final/, namun tidak dimuat oleh app.py pada saat aplikasi berjalan. Deteksi emosi pada aplikasi dilakukan melalui Gemini API, bukan melalui model hasil training ini.
 
 ---
 
@@ -831,7 +832,7 @@ chunks.pkl
 emotion_model_final/
 ```
 
-Ketiga file tersebut digunakan langsung oleh aplikasi Streamlit.
+Dari ketiga file tersebut, hanya faiss_index.index dan chunks.pkl yang digunakan langsung oleh aplikasi Streamlit saat runtime. Folder emotion_model_final/ dihasilkan sebagai output eksplorasi notebook dan tidak dipanggil oleh app.py.
 
 ---
 
@@ -849,10 +850,10 @@ Buat file
 .env
 ```
 
-Isi dengan API Key Groq.
+Isi dengan API Key Gemini.
 
 ```
-GROQ_API_KEY=YOUR_GROQ_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
 ---
@@ -884,7 +885,7 @@ Input Question
 
 ↓
 
-Emotion Detection
+Emotion Classification
 
 ↓
 
@@ -904,7 +905,7 @@ Prompt Engineering
 
 ↓
 
-Groq API
+Gemini API
 
 ↓
 
@@ -1004,7 +1005,7 @@ requirements.txt
 Tambahkan Environment Variable.
 
 ```
-GROQ_API_KEY=YOUR_GROQ_API_KEY
+| GEMINI_API_KEY | API Key Gemini |
 ```
 
 ---
@@ -1041,7 +1042,7 @@ Deployment Success
 
 | Variable | Description |
 |-----------|-------------|
-| GROQ_API_KEY | API Key Groq |
+| GEMINI_API_KEY | YOUR_GEMINI_API_KEY |
 
 ---
 
@@ -1065,9 +1066,8 @@ Digunakan untuk semantic search.
 
 ## emotion_model_final/
 
-Model hasil fine-tuning emotion classifier.
-
-Digunakan ketika chatbot berjalan.
+Berisi model hasil training emotion classifier yang dihasilkan oleh notebook.
+Catatan: Model ini tidak dimuat atau digunakan oleh app.py saat aplikasi berjalan. Deteksi emosi pada runtime dilakukan sepenuhnya melalui pemanggilan Gemini API, bukan melalui model hasil fine-tuning ini.
 
 ---
 
@@ -1130,7 +1130,7 @@ Prompt Engineering
 
 ↓
 
-Groq LLM
+Gemini LLM
 
 ↓
 
@@ -1176,10 +1176,9 @@ Sentence Transformer menghasilkan embedding yang menangkap makna kalimat, sehing
 
 ---
 
-### Mengapa menggunakan Groq?
+### Mengapa menggunakan Gemini?
 
-Groq menyediakan layanan inference dengan latensi rendah untuk berbagai model LLM open-source, sehingga chatbot dapat memberikan respons lebih cepat.
-
+Gemini menyediakan satu ekosistem API yang mendukung generasi jawaban, deteksi emosi, dan transkripsi suara sekaligus, sehingga memudahkan integrasi seluruh fitur chatbot dalam satu penyedia layanan.
 ---
 
 ### Mengapa ada Emotion Classification?
@@ -1265,7 +1264,7 @@ streamlit run app.py
 Pastikan file `.env` tersedia dan berisi:
 
 ```
-GROQ_API_KEY=YOUR_GROQ_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
 ---
@@ -1317,7 +1316,7 @@ Beberapa pengembangan yang dapat dilakukan pada versi berikutnya:
 - Hugging Face Transformers Documentation.
 - PaddleOCR Documentation.
 - Streamlit Documentation.
-- Groq API Documentation.
+- Gemini API Documentation.
 - PyTorch Documentation.
 
 ---
@@ -1346,5 +1345,8 @@ Silakan menggunakan, mempelajari, dan mengembangkan repository ini sesuai kebutu
 ---
 
 <p align="center">
-Made with ❤️ using Python, Streamlit, FAISS, Sentence Transformers, PaddleOCR, and Groq LLM.
+CHATBOT RUANG AMAN 💛
+
+Chatbot Konseling dan Informasi Hukum UU No. 12 Tahun 2022 tentang Tindak Pidana Kekerasan Seksual (TPKS)
+Dibangun dengan pendekatan Retrieval-Augmented Generation (RAG) dan Deteksi Konteks Emosional berbasis LLM
 </p>
